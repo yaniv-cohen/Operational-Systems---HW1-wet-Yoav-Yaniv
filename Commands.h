@@ -3,6 +3,8 @@
 #define SMASH_COMMAND_H_
 
 #include <vector>
+#include <map>
+#include <sys/utsname.h>
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -10,12 +12,12 @@
 class Command
 {
     // TODO: Add your data members
-    char cmd_line[COMMAND_MAX_LENGTH];
+    char *cmd_line;
 
 public:
     Command(const char *cmd_line)
     {
-        strcpy(this->cmd_line, cmd_line);
+        cmd_line = cmd_line;
     };
 
     virtual ~Command();
@@ -193,7 +195,7 @@ class JobsList;
 class QuitCommand : public BuiltInCommand
 {
     // TODO: Add your data members public:
-    QuitCommand(const char *cmd_line, JobsList *jobs);
+    QuitCommand(string &restOfWord, JobsList *jobs);
 
     virtual ~QuitCommand()
     {
@@ -209,13 +211,13 @@ public:
     {
         // TODO: Add your data members
         // int pid;
-        int jobId;
+        // int jobId;
         Command *cmd;
-        bool isStopped;
+        bool isFinished;
     };
 
     // TODO: Add your data members
-    std::vector<JobEntry> jobs;
+    std::map<size_t, JobEntry> jobs;
     // std::vector<JobEntry*> stopedJobs;
     std::vector<int> freedJobIds;
     int curMaxJobId = 1;
@@ -225,74 +227,73 @@ public:
 
     ~JobsList();
 
-    void addJob(Command *cmd, bool isStopped = false)
+    void addJob(Command *cmd, bool isFinished = false)
     {
-        int newJobId = -1;
-        if (freedJobIds.size() > 0)
-        {
-            int newJobId = freedJobIds.back();
-            freedJobIds.pop_back();
-        }
-        else if (curMaxJobId < INT_MAX)
+        int newJobId;
+        if (curMaxJobId < INT_MAX)
         {
             newJobId = curMaxJobId;
             curMaxJobId++;
         }
-        else
-        {
-            throw std::exception("smash error: cannot add new job");
-        }
-
-        JobEntry newJob;
-        newJob.cmd = cmd;
-        newJob.jobId = newJobId;
-        newJob.isStopped = isStopped;
-
-        // if(isStopped)
+        // else if (freedJobIds.size() > 0)
         // {
-        //     stopedJobs.push_back(&newJob);
+        //     int newJobId = freedJobIds.back();
+        //     freedJobIds.pop_back();
         // }
-        
-        jobs.push_back(newJob);
+
+        // else
+        // {
+        //     throw std::exception("smash error: cannot add new job");
+        // }
+
+        JobEntry *newJob = JobEntry();
+        newJob->cmd = cmd;
+        newJob->isFinished = isFinished;
+
+        jobs.insert(newJobId, newJob);
+        // TODO: figure out job id assignment
     };
 
-    void printJobsList(){
-        for (auto job : jobs)
+    void printJobsList()
+    {
+        removeFinishedJobs();
+
+        for (const auto &[id, job] : jobs)
         {
-            std::cout << "[" << job.jobId << "] " << job.cmd->getCmdLine() < "\n" << std::endl;
-            //TODO: make sure no excess \n
+            // TODO: SORT BY JOB ID, and
+            std::cout << "[" << id << "] " << job.cmd->getCmdLine() < "\n" << std::endl;
+            // TODO: make sure no excess \n
         }
     };
 
     void killAllJobs();
 
-    void removeFinishedJobs();
-
-    JobEntry *getJobById(int jobId){
-        //TODO: optimize search
-        for (auto &job : jobs)
+    void removeFinishedJobs()
+    {
+        for (auto &it : jobs)
         {
-            if (job.jobId == jobId)
+            if (it->key->job->isFinished == 1)
             {
-                return &job;
-            }
-        }
-        return nullptr;
-    };
-
-    void removeJobById(int jobId){
-        for (auto &  it = jobs.begin(); it != jobs.end(); ++it)
-        {
-            if (it->jobId == jobId)
-            {
-                freedJobIds.push_back(it->jobId);
                 jobs.erase(it);
-                return;
             }
         }
     };
 
-    JobEntry *getLastJob(int *lastJobId);
+    JobEntry *getJobById(int jobId)
+    {
+        // TODO: optimize search
+        return jobs[jobId];
+    };
+
+    void removeJobById(int jobId)
+    {
+        jobs.erase(jobId);
+    };
+
+    JobEntry *getLastJob()
+    {
+        return jobs.end().key;
+    };
 
     JobEntry *getLastStoppedJob(int *jobId);
 
@@ -302,40 +303,124 @@ public:
 class JobsCommand : public BuiltInCommand
 {
     // TODO: Add your data members
+    JobsList *jobsList;
+
 public:
-    JobsCommand(const char *cmd_line, JobsList *jobs);
+    JobsCommand(JobsList *jobs)
+    {
+        jobsList = jobs;
+    };
 
     virtual ~JobsCommand()
     {
     }
 
-    void execute() override;
+    void execute() override
+    {
+        jobsList.printJobsList();
+    };
 };
 
 class KillCommand : public BuiltInCommand
 {
     // TODO: Add your data members
+    int signal;
+    int jobId;
+
 public:
-    KillCommand(const char *cmd_line, JobsList *jobs);
+    KillCommand(string &restOfWord, JobsList *jobs)
+    {
+
+        int argCount = sscanf(restOfWord, "-%d %d", &signal, &jobId);
+        if (argCount != 2)
+        {
+            throw std::exception("smash error: kill: invalid arguments");
+        }
+    };
 
     virtual ~KillCommand()
     {
     }
 
-    void execute() override;
+    void execute() override
+    {
+        if (JobsList->contains(jobId) == 0)
+        {
+            throw std::exception("smash error: kill: job-id " + jobId + " does not exist");
+        }
+        //
+        int pid = JobsList->getJobById(jobId)->cmd;
+        if (kill(pid, signal) == -1)
+        {
+            throw std::exception("smash error: kill: kill failed");
+        }
+
+        // TODO: actually kill the process
+    };
 };
 
 class ForegroundCommand : public BuiltInCommand
 {
     // TODO: Add your data members
+    size_t targetJobId;
+
 public:
-    ForegroundCommand(const char *cmd_line, JobsList *jobs);
+    ForegroundCommand(string arguments)
+    {
+        // count arguments
+        if (arguments.length() == 0)
+        {
+            // no arguments
+            targetJobId = jobs->getLastJob();
+        }
+        else
+        {
+            targetJobId = stoi(arguments);
+        }
+    };
 
     virtual ~ForegroundCommand()
     {
     }
 
-    void execute() override;
+    void execute() override
+    {
+        JobsList *jobs = &(SmallShell::getInstance().getJobsList());
+
+        if (jobs->jobs.size() == 0)
+        {
+            throw std::exception("smash error: fg: jobs list is empty");
+        }
+
+        if (jobs.contains(targetJobId) == 0)
+        {
+            throw std::exception("smash error: fg: job-id " + targetJobId + " does not exist");
+        }
+
+        int pid = fork();
+        if (pid == 0)
+        {
+            std::cout << "[" << getpid() << "] " << jobs[targetJobId]->cmd->getCmdLine() << std::endl;
+            execv(jobs[targetJobId]->cmd->getCmdLine(), nullptr);
+            perror("smash error: fg: execv failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid > 0)
+        {
+            int status;
+            waitpid(pid, &status, 0);
+            if (WIFEXITED(status))
+            {
+                // normal exit
+                jobs->removeJobById(targetJobId);
+            }
+            else
+            {
+                // something else
+                throw std::exception("smash error: fg: fork failed");
+            }
+        }
+    };
 };
 
 class AliasCommand : public BuiltInCommand
@@ -377,13 +462,58 @@ public:
 class SysInfoCommand : public BuiltInCommand
 {
 public:
-    SysInfoCommand(const char *cmd_line);
+    SysInfoCommand();
 
     virtual ~SysInfoCommand()
     {
     }
 
-    void execute() override;
+    void execute() override
+    {
+        struct utsname name;
+        if (uname(&name) == 0)
+        {
+            std::cout << "System: " << name.sysname << std::endl;
+            std::cout << "Hostname: " << name.nodename << std::endl;
+            std::cout << "Kernel: " << name.release << std::endl;
+            std::cout << "Architecture: " << name.machine << std::endl;
+        }
+        else
+        {
+            // Handle error: Could not get system information
+            std::cerr << "smash error: sysinfo: failed to retrieve basic info" << std::endl;
+        }
+
+            std::ifstream stat_file("/proc/stat");
+            std::string line;
+            long boot_time_sec = 0;
+
+            // Search for the "btime" line in /proc/stat
+            while (std::getline(stat_file, line))
+            {
+                if (line.substr(0, 6) == "btime ")
+                {
+                    std::stringstream ss(line.substr(6));
+                    ss >> boot_time_sec;
+                    break;
+                }
+            }
+
+            if (boot_time_sec == 0)
+            {
+                return "N/A"; // Error reading file
+            }
+
+            // Convert seconds since epoch to a formatted string
+            std::time_t boot_time_t = boot_time_sec;
+            struct tm *tm_info = std::localtime(&boot_time_t);
+
+            char buffer[20];
+            // Format: YYYY-MM-DD HH:MM:SS
+            std::strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
+
+            std::cout << "Boot Time: " << std::string(buffer) << std::endl;
+        }
 };
 
 class SmallShell
@@ -394,7 +524,7 @@ private:
     char previousUsedPath[PATH_MAX] = nullptr;
 
     string promp = "smash";
-
+    JobsList jobsList;
     SmallShell();
 
 public:
@@ -422,7 +552,10 @@ public:
     }
 
     ~SmallShell();
-
+    JobsList &getJobsList()
+    {
+        return jobsList;
+    }
     void executeCommand(const char *cmd_line);
 
     // TODO: add extra methods as needed
