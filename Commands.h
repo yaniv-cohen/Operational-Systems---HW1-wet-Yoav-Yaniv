@@ -4,10 +4,10 @@
 
 #include <vector>
 #include <map>
-#include <sys/utsname.h>
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
+using namespace std;
 
 class Command
 {
@@ -17,10 +17,10 @@ class Command
 public:
     Command(const char *cmd_line)
     {
-        cmd_line = cmd_line;
+        strcpy(this->cmd_line, cmd_line);
     };
 
-    virtual ~Command();
+    virtual ~Command() = default;
 
     virtual void execute() = 0;
 
@@ -31,204 +31,165 @@ public:
     {
         return cmd_line;
     }
+    void setCmdLine(char* newLine){
+        cmd_line = newLine;
+    }
 };
 
 class BuiltInCommand : public Command
 {
 public:
-    BuiltInCommand(const char *cmd_line);
+    BuiltInCommand(const char *cmd_line) : Command(cmd_line){};
 
-    virtual ~BuiltInCommand()
-    {
-    }
+    virtual ~BuiltInCommand() = default;
+//    {
+//    }
 };
-
-class ExternalCommand : public Command
-{
-public:
-    ExternalCommand(const char *cmd_line);
-
-    virtual ~ExternalCommand()
-    {
-    }
-
-    void execute() override;
-};
-
-class RedirectionCommand : public Command
-{
-    // TODO: Add your data members
-public:
-    explicit RedirectionCommand(const char *cmd_line);
-
-    virtual ~RedirectionCommand()
-    {
-    }
-
-    void execute() override;
-};
-
-class PipeCommand : public Command
-{
-    // TODO: Add your data members
-public:
-    PipeCommand(const char *cmd_line);
-
-    virtual ~PipeCommand()
-    {
-    }
-
-    void execute() override;
-};
-
-class DiskUsageCommand : public Command
-{
-public:
-    DiskUsageCommand(const char *cmd_line);
-
-    virtual ~DiskUsageCommand()
-    {
-    }
-
-    void execute() override;
-};
-
-class WhoAmICommand : public Command
-{
-public:
-    WhoAmICommand(const char *cmd_line);
-
-    virtual ~WhoAmICommand()
-    {
-    }
-
-    void execute() override;
-};
-
-class USBInfoCommand : public Command
-{
-    // TODO: Add your data members **BONUS: 10 Points**
-public:
-    USBInfoCommand(const char *cmd_line);
-
-    virtual ~USBInfoCommand()
-    {
-    }
-
-    void execute() override;
-};
+//
+//class ExternalCommand : public Command
+//{
+//public:
+//    ExternalCommand(const char *cmd_line);
+//
+//    virtual ~ExternalCommand()
+//    {
+//    }
+//
+//    void execute() override;
+//};
+//
+//class RedirectionCommand : public Command
+//{
+//    // TODO: Add your data members
+//public:
+//    explicit RedirectionCommand(const char *cmd_line);
+//
+//    virtual ~RedirectionCommand()
+//    {
+//    }
+//
+//    void execute() override;
+//};
+//
+//class PipeCommand : public Command
+//{
+//    // TODO: Add your data members
+//public:
+//    PipeCommand(const char *cmd_line);
+//
+//    virtual ~PipeCommand()
+//    {
+//    }
+//
+//    void execute() override;
+//};
+//
+//class DiskUsageCommand : public Command
+//{
+//public:
+//    DiskUsageCommand(const char *cmd_line);
+//
+//    virtual ~DiskUsageCommand()
+//    {
+//    }
+//
+//    void execute() override;
+//};
+//
+//class WhoAmICommand : public Command
+//{
+//public:
+//    WhoAmICommand(const char *cmd_line);
+//
+//    virtual ~WhoAmICommand()
+//    {
+//    }
+//
+//    void execute() override;
+//};
+//
+//class USBInfoCommand : public Command
+//{
+//    // TODO: Add your data members **BONUS: 10 Points**
+//public:
+//    USBInfoCommand(const char *cmd_line);
+//
+//    virtual ~USBInfoCommand()
+//    {
+//    }
+//
+//    void execute() override;
+//};
 
 class ChangeDirCommand : public BuiltInCommand
 {
     // TODO: Add your data members public:
-    char newTargetPath[_MAX_PATH]; // on execute go here
-    string *previousUsedPath;
+    char* newTargetPath;
+    char* previousUsedPath;
 
 public:
-    ChangeDirCommand(const char *restOfWords, string *previousUsedPath);
-    previousUsedPath(previousUsedPath)
-    {
-        string args[COMMAND_MAX_ARGS]{"\n"};
-        _parseCommandLine(restOfWords, args);
+    ChangeDirCommand(const char *cmdLine, const char *previousUsed);
 
-        if (args[0] != "\n")
-        {
-            if (args[1].compare("\n") == 0)
-            {
-                throw std::exception("smash error: cd: too many arguments");
-            }
 
-            else if (args[1].compare("-") == 0)
-            {
-                newTargetPath = *previousUsedPath;
-            }
-            else
-            {
-                newTargetPath = args[1];
-            }
-        }
-        // TODO: parse restOfWords to get the target path, and handle spaces
-        // newTargetPath = restOfWords; // after "cd "
+    virtual ~ChangeDirCommand() = default;
 
-        // previousUsedPath = previousUsedPath;
-    };
-
-    virtual ~ChangeDirCommand()
-    {
-    }
-
-    void execute() override
-    {
-        SmallShell &smash = SmallShell::getInstance();
-        if (newTargetPath == nullptr)
-        {
-            // TODO: catch this exception
-            throw std::exception("smash error: cd: OLDPWD not set");
-        }
-
-        string pathBeforeChange = getcwd(*previousUsedPath, sizeof(*previousUsedPath));
-        if (chdir(newTargetPath) == 0)
-        {
-            *previousUsedPath = pathBeforeChange;
-        }
-        else
-        {
-            throw std::exception("smash error: cd: invalid path");
-        }
-    }
-};
+    void execute() override;
+}; //done
 
 class GetCurrDirCommand : public BuiltInCommand
 {
 public:
-    GetCurrDirCommand();
+    GetCurrDirCommand(const char *cmdLine) : BuiltInCommand(cmdLine){};
 
-    virtual ~GetCurrDirCommand()
-    {
-    }
+    virtual ~GetCurrDirCommand() = default;
 
-    void execute() override;
-};
+    void execute() override{
+        char cwd[PATH_MAX];
+        if (getcwd(cwd, sizeof(cwd)) != nullptr)
+        {
+            std::cout << cwd << std::endl;
+        }
+        else
+        {
+            perror("smash error: getcwd failed");
+        }
+    };
+}; //done
 
 class ShowPidCommand : public BuiltInCommand
 {
 public:
-    ShowPidCommand();
+    ShowPidCommand(const char *cmdLine) : BuiltInCommand(cmdLine){};
 
-    virtual ~ShowPidCommand()
-    {
+    virtual ~ShowPidCommand() = default;
+
+    void execute() override{
+        std::cout << "smash pid is " << getpid() << std::endl;
     }
-
-    void execute() override;
-};
+}; //done
 
 class SetPromptCommand : public BuiltInCommand
 {
-    string givenPrompt;
 
 public:
-    SetPromptCommand(const string &givenPrompt);
-    SetPromptCommand();
-
-    virtual ~ShowPidCommand()
-    {
-    }
+    SetPromptCommand(const char *cmdLine);
 
     void execute() override;
-};
+}; //done
+
 class JobsList;
 
-class QuitCommand : public BuiltInCommand
-{
-    // TODO: Add your data members public:
-    QuitCommand(string &restOfWord, JobsList *jobs);
-
-    virtual ~QuitCommand()
-    {
-    }
-
-    void execute() override;
-};
+//class QuitCommand : public BuiltInCommand
+//{
+//    // TODO: Add your data members public:
+//    QuitCommand(string &restOfWord, JobsList *jobs);
+//
+//    virtual ~QuitCommand()
+//    {
+//    }
+//
+//    void execute() override;
+//};
 
 class JobsList
 {
@@ -236,17 +197,19 @@ public:
     class JobEntry
     {
         // TODO: Add your data members
-        // int pid;
-        // int jobId;
-        Command *cmd;
-        bool isFinished;
+    public:
+//         int pid = 0;
+         int jobId = 1;
+        bool isFinished = false;
+        Command *cmd = nullptr;
+
+        JobEntry() = default;
+        JobEntry(int jobId, Command* cmd, bool isFinished) :
+        jobId(jobId), cmd(cmd), isFinished(isFinished){};
     };
 
     // TODO: Add your data members
-    std::map<size_t, JobEntry> jobs;
-    // std::vector<JobEntry*> stopedJobs;
-    std::vector<int> freedJobIds;
-    int curMaxJobId = 1;
+    map<int, JobEntry> jobs;
 
 public:
     JobsList();
@@ -255,29 +218,18 @@ public:
 
     void addJob(Command *cmd, bool isFinished = false)
     {
-        int newJobId;
-        if (curMaxJobId < INT_MAX)
-        {
-            newJobId = curMaxJobId;
-            curMaxJobId++;
+        int newJobId = -1;
+        auto it = jobs.begin();
+        for (int i = 1; i <= 100 ; i++, it++){
+            if(it == jobs.end() || i != it->first){
+                newJobId = i;
+                break;
+            }
+        }       //find first open jobId. maximum of 100 jobs (page 2 under assumptions)
+        if(newJobId == -1){
+            throw runtime_error("Jobs full"); //ask what error to put for full jobs list
         }
-        // else if (freedJobIds.size() > 0)
-        // {
-        //     int newJobId = freedJobIds.back();
-        //     freedJobIds.pop_back();
-        // }
-
-        // else
-        // {
-        //     throw std::exception("smash error: cannot add new job");
-        // }
-
-        JobEntry *newJob = JobEntry();
-        newJob->cmd = cmd;
-        newJob->isFinished = isFinished;
-
-        jobs.insert(newJobId, newJob);
-        // TODO: figure out job id assignment
+        jobs[newJobId] = JobEntry(newJobId, cmd, isFinished);
     };
 
     void printJobsList()
@@ -286,9 +238,7 @@ public:
 
         for (const auto &[id, job] : jobs)
         {
-            // TODO: SORT BY JOB ID, and
-            std::cout << "[" << id << "] " << job.cmd->getCmdLine() < "\n" << std::endl;
-            // TODO: make sure no excess \n
+            std::cout << "[" << id << "] " << job.cmd->getCmdLine() << std::endl;
         }
     };
 
@@ -296,19 +246,18 @@ public:
 
     void removeFinishedJobs()
     {
-        for (auto &it : jobs)
+        for (auto &[id, job] : jobs)
         {
-            if (it->key->job->isFinished == 1)
+            if (job.isFinished == 1)
             {
-                jobs.erase(it);
+                removeJobById(id);
             }
         }
     };
 
     JobEntry *getJobById(int jobId)
     {
-        // TODO: optimize search
-        return jobs[jobId];
+        return &jobs.at(jobId);
     };
 
     void removeJobById(int jobId)
@@ -318,10 +267,10 @@ public:
 
     JobEntry *getLastJob()
     {
-        return jobs.end().key;
+        return &prev(jobs.end())->second;
     };
 
-    JobEntry *getLastStoppedJob(int *jobId);
+//    JobEntry *getLastStoppedJob(int *jobId);
 
     // TODO: Add extra methods or modify exisitng ones as needed
 };
@@ -332,265 +281,199 @@ class JobsCommand : public BuiltInCommand
     JobsList *jobsList;
 
 public:
-    JobsCommand(JobsList *jobs)
-    {
-        jobsList = jobs;
-    };
+    JobsCommand(const char *cmdLine, JobsList *jobs) : BuiltInCommand(cmdLine), jobsList(jobs) {};
 
-    virtual ~JobsCommand()
-    {
-    }
+    virtual ~JobsCommand() = default;
 
     void execute() override
     {
-        jobsList.printJobsList();
+        jobsList->printJobsList();
     };
-};
+}; //done
 
-class KillCommand : public BuiltInCommand
-{
-    // TODO: Add your data members
-    int signal;
-    int jobId;
-
-public:
-    KillCommand(string &restOfWord, JobsList *jobs)
-    {
-        if (restOfWords.length() == 0 || restOfWords[0] != '-')
-        {
-            throw std::exception("smash error: kill: invalid arguments");
-        }
-
-        int spaceCount = 0;
-        for (int i = 1; i < restOfWords.length(); i++)
-        {
-            if (restOfWords[i] == ' ')
-            {
-                spaceCount++;
-                if (spaceCount > 1)
-                {
-                    throw std::exception("smash error: fg: invalid arguments");
-                }
-            }
-            else if (restOfWords[i] < '0' || restOfWords[i] > '9')
-            {
-                throw std::exception("smash error: fg: invalid arguments");
-            }
-        }
-
-        if (spaceCount != 1)
-        {
-            throw std::exception("smash error: fg: invalid arguments");
-        }
-        int argCount = sscanf(restOfWord, "-%d %d", &signal, &jobId);
-        if (argCount != 2)
-        {
-            throw std::exception("smash error: kill: invalid arguments");
-        }
-    };
-
-    virtual ~KillCommand()
-    {
-    }
-
-    void execute() override
-    {
-        if (JobsList->contains(jobId) == 0)
-        {
-            throw std::exception("smash error: kill: job-id " + jobId + " does not exist");
-        }
-        //
-        int pid = JobsList->getJobById(jobId)->cmd;
-        if (kill(pid, signal) == -1)
-        {
-            throw std::exception("smash error: kill: kill failed");
-        }
-
-        // TODO: actually kill the process
-    };
-};
+//class KillCommand : public BuiltInCommand
+//{
+//    // TODO: Add your data members
+//    int signal;
+//    int jobId;
+//
+//public:
+//    KillCommand(string &restOfWord, JobsList *jobs)
+//    {
+//        if (restOfWords.length() == 0 || restOfWords[0] != '-')
+//        {
+//            throw std::exception("smash error: kill: invalid arguments");
+//        }
+//
+//        int spaceCount = 0;
+//        for (int i = 1; i < restOfWords.length(); i++)
+//        {
+//            if (restOfWords[i] == ' ')
+//            {
+//                spaceCount++;
+//                if (spaceCount > 1)
+//                {
+//                    throw std::exception("smash error: fg: invalid arguments");
+//                }
+//            }
+//            else if (restOfWords[i] < '0' || restOfWords[i] > '9')
+//            {
+//                throw std::exception("smash error: fg: invalid arguments");
+//            }
+//        }
+//
+//        if (spaceCount != 1)
+//        {
+//            throw std::exception("smash error: fg: invalid arguments");
+//        }
+//        int argCount = sscanf(restOfWord, "-%d %d", &signal, &jobId);
+//        if (argCount != 2)
+//        {
+//            throw std::exception("smash error: kill: invalid arguments");
+//        }
+//    };
+//
+//    virtual ~KillCommand()
+//    {
+//    }
+//
+//    void execute() override
+//    {
+//        if (JobsList->contains(jobId) == 0)
+//        {
+//            throw std::exception("smash error: kill: job-id " + jobId + " does not exist");
+//        }
+//        //
+//        int pid = JobsList->getJobById(jobId)->cmd;
+//        if (kill(pid, signal) == -1)
+//        {
+//            throw std::exception("smash error: kill: kill failed");
+//        }
+//
+//        // TODO: actually kill the process
+//    };
+//};
 
 class ForegroundCommand : public BuiltInCommand
 {
     // TODO: Add your data members
-    size_t targetJobId;
-    JobsList *jobsList
+    int targetJobId;
+    JobsList *jobsList;
 public:
-    ForegroundCommand(string arguments, JobsList *jobsList):jobsList(JobsList)
-    {
-
-        string args[COMMAND_MAX_ARGS]{"\n"};
-        _parseCommandLine(restOfWords, args);
-        // count arguments
-        if (args[0] == "\n")
-        {
-            // no arguments
-            targetJobId = jobs->getLastJob();
-        }
-        else if(args[2] != "\n")
-        {
-
-            // targetJobId = stoi(arguments);
-        }
-        else if(args[1] != "\n")
-        {
-            // targetJobId = stoi(arguments);
-            targetJobId = stoi(args[1]);
-        }
-    };
+    ForegroundCommand(const char* cmd_line, JobsList *jobsList);
 
     virtual ~ForegroundCommand()
     {
     }
 
-    void execute() override
-    {
-
-        if (jobsList->jobs.size() == 0)
-        {
-            throw std::exception("smash error: fg: jobs list is empty");
-        }
-
-        if (jobsList->jobs.contains(targetJobId) == 0)
-        {
-            throw std::exception("smash error: fg: job-id " + targetJobId + " does not exist");
-        }
-
-        //job exists
-        int pid = fork();
-        if (pid == 0)
-        {
-            std::cout << "[" << getpid() << "] " << jobs[targetJobId]->cmd->getCmdLine() << std::endl;
-            execv(jobs[targetJobId]->cmd->getCmdLine(), nullptr);
-            perror("smash error: fg: execv failed");
-            exit(EXIT_FAILURE);
-        }
-        else if (pid > 0)
-        {
-            int status;
-            waitpid(pid, &status, 0);
-            if (WIFEXITED(status))
-            {
-                // normal exit
-                jobs->removeJobById(targetJobId);
-            }
-            else
-            {
-                // something else
-                throw std::exception("smash error: fg: execv failed");
-            }
-        }
-        else{
-                throw std::exception("smash error: fg: fork failed");
-        }
-    };
-};
-
-class AliasCommand : public BuiltInCommand
-{
-public:
-    AliasCommand(const char *cmd_line);
-
-    virtual ~AliasCommand()
-    {
-    }
-
     void execute() override;
 };
 
-class UnAliasCommand : public BuiltInCommand
-{
-public:
-    UnAliasCommand(const char *cmd_line);
-
-    virtual ~UnAliasCommand()
-    {
-    }
-
-    void execute() override;
-};
-
-class UnSetEnvCommand : public BuiltInCommand
-{
-public:
-    UnSetEnvCommand(const char *cmd_line);
-
-    virtual ~UnSetEnvCommand()
-    {
-    }
-
-    void execute() override;
-};
-
-class SysInfoCommand : public BuiltInCommand
-{
-public:
-    SysInfoCommand();
-
-    virtual ~SysInfoCommand()
-    {
-    }
-
-    void execute() override
-    {
-        struct utsname name;
-
-        // TODO: change to
-
-        // open /proc and read from there
-        if (uname(&name) == 0)
-        {
-            std::cout << "System: " << name.sysname << std::endl;
-            std::cout << "Hostname: " << name.nodename << std::endl;
-            std::cout << "Kernel: " << name.release << std::endl;
-            std::cout << "Architecture: " << name.machine << std::endl;
-        }
-        else
-        {
-            // Handle error: Could not get system information
-            std::cerr << "smash error: sysinfo: failed to retrieve basic info" << std::endl;
-        }
-
-        std::ifstream stat_file("/proc/stat");
-        std::string line;
-        long boot_time_sec = 0;
-
-        // Search for the "btime" line in /proc/stat
-        while (std::getline(stat_file, line))
-        {
-            if (line.substr(0, 6) == "btime ")
-            {
-                std::stringstream ss(line.substr(6));
-                ss >> boot_time_sec;
-                break;
-            }
-        }
-
-        if (boot_time_sec == 0)
-        {
-            return "N/A"; // Error reading file
-        }
-
-        // Convert seconds since epoch to a formatted string
-        std::time_t boot_time_t = boot_time_sec;
-        struct tm *tm_info = std::localtime(&boot_time_t);
-
-        char buffer[20];
-        // Format: YYYY-MM-DD HH:MM:SS
-        std::strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
-
-        std::cout << "Boot Time: " << std::string(buffer) << std::endl;
-    }
-};
+//class AliasCommand : public BuiltInCommand
+//{
+//public:
+//    AliasCommand(const char *cmd_line);
+//
+//    virtual ~AliasCommand()
+//    {
+//    }
+//
+//    void execute() override;
+//};
+//
+//class UnAliasCommand : public BuiltInCommand
+//{
+//public:
+//    UnAliasCommand(const char *cmd_line);
+//
+//    virtual ~UnAliasCommand()
+//    {
+//    }
+//
+//    void execute() override;
+//};
+//
+//class UnSetEnvCommand : public BuiltInCommand
+//{
+//public:
+//    UnSetEnvCommand(const char *cmd_line);
+//
+//    virtual ~UnSetEnvCommand()
+//    {
+//    }
+//
+//    void execute() override;
+//};
+//
+//class SysInfoCommand : public BuiltInCommand
+//{
+//public:
+//    SysInfoCommand();
+//
+//    virtual ~SysInfoCommand()
+//    {
+//    }
+//
+//    void execute() override
+//    {
+//        struct utsname name;
+//
+//        // TODO: change to
+//
+//        // open /proc and read from there
+//        if (uname(&name) == 0)
+//        {
+//            std::cout << "System: " << name.sysname << std::endl;
+//            std::cout << "Hostname: " << name.nodename << std::endl;
+//            std::cout << "Kernel: " << name.release << std::endl;
+//            std::cout << "Architecture: " << name.machine << std::endl;
+//        }
+//        else
+//        {
+//            // Handle error: Could not get system information
+//            std::cerr << "smash error: sysinfo: failed to retrieve basic info" << std::endl;
+//        }
+//
+//        std::ifstream stat_file("/proc/stat");
+//        std::string line;
+//        long boot_time_sec = 0;
+//
+//        // Search for the "btime" line in /proc/stat
+//        while (std::getline(stat_file, line))
+//        {
+//            if (line.substr(0, 6) == "btime ")
+//            {
+//                std::stringstream ss(line.substr(6));
+//                ss >> boot_time_sec;
+//                break;
+//            }
+//        }
+//
+//        if (boot_time_sec == 0)
+//        {
+//            return "N/A"; // Error reading file
+//        }
+//
+//        // Convert seconds since epoch to a formatted string
+//        std::time_t boot_time_t = boot_time_sec;
+//        struct tm *tm_info = std::localtime(&boot_time_t);
+//
+//        char buffer[20];
+//        // Format: YYYY-MM-DD HH:MM:SS
+//        std::strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
+//
+//        std::cout << "Boot Time: " << std::string(buffer) << std::endl;
+//    }
+//};
 
 class SmallShell
 {
 private:
     // TODO: Add your data members
 
-    char previousUsedPath[PATH_MAX] = nullptr;
+    char previousUsedPath[PATH_MAX] = {0};
 
-    string promp = "smash";
+    string prompt = "smash";
     JobsList jobsList;
     SmallShell();
 
@@ -605,25 +488,30 @@ public:
         // Instantiated on first use.
         return instance;
     }
-    void setPompt(const string &newPrompt)
+
+    ~SmallShell();
+
+    void executeCommand(const char *cmd_line);
+
+    void setPrompt(const string &newPrompt)
     {
-        promp = newPrompt;
+        prompt = newPrompt;
     }
-    void updatePreviousUsedPath()
+    string getPrompt(){
+        return prompt;
+    }
+    void setPreviousUsedPath(const char *previousUsed)
     {
-        getcwd(previousUsedPath, sizeof(previousUsedPath));
+        strcpy(previousUsedPath, previousUsed);
     }
-    char *getPreviousUsedPath()
+    char* getPreviousUsedPath()
     {
         return previousUsedPath;
     }
-
-    ~SmallShell();
     JobsList &getJobsList()
     {
         return jobsList;
     }
-    void executeCommand(const char *cmd_line);
 
     // TODO: add extra methods as needed
 };

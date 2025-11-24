@@ -43,56 +43,56 @@ int _parseCommandLine(const char *cmd_line, char **args)
 {
     FUNC_ENTRY()
     int i = 0;
-    std::istringstream iss(_trim(string(cmd_line)).c_str());
+    std::istringstream iss(_trim(string(cmd_line)));
     for (std::string s; iss >> s;)
     {
         args[i] = (char *)malloc(s.length() + 1);
         memset(args[i], 0, s.length() + 1);
         strcpy(args[i], s.c_str());
-        args[++i] = NULL;
+        args[++i] = nullptr;
     }
     return i;
     FUNC_EXIT()
 }
 
-bool _isBackgroundComamnd(const char *cmd_line)
-{
-    const string str(cmd_line);
-    return str[str.find_last_not_of(WHITESPACE)] == '&';
-}
+//bool _isBackgroundCommand(const char *cmd_line)
+//{
+//    const string str(cmd_line);
+//    return str[str.find_last_not_of(WHITESPACE)] == '&';
+//}
 
-void _removeBackgroundSign(char *cmd_line)
-{
-    const string str(cmd_line);
-    // find last character other than spaces
-    unsigned int idx = str.find_last_not_of(WHITESPACE);
-    // if all characters are spaces then return
-    if (idx == string::npos)
-    {
-        return;
-    }
-    // if the command line does not end with & then return
-    if (cmd_line[idx] != '&')
-    {
-        return;
-    }
-    // replace the & (background sign) with space and then remove all tailing spaces.
-    cmd_line[idx] = ' ';
-    // truncate the command line string up to the last non-space character
-    cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
-}
+//void _removeBackgroundSign(char *cmd_line)
+//{
+//    const string str(cmd_line);
+//    // find last character other than spaces
+//    unsigned int idx = str.find_last_not_of(WHITESPACE);
+//    // if all characters are spaces then return
+//    if (idx == string::npos)
+//    {
+//        return;
+//    }
+//    // if the command line does not end with & then return
+//    if (cmd_line[idx] != '&')
+//    {
+//        return;
+//    }
+//    // replace the & (background sign) with space and then remove all tailing spaces.
+//    cmd_line[idx] = ' ';
+//    // truncate the command line string up to the last non-space character
+//    cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
+//}
 
 // TODO: Add your implementation for classes in Commands.h
 
-SmallShell::SmallShell()
-{
-    // TODO: add your implementation
-}
+SmallShell::SmallShell() = default;
+//{
+//    // TODO: add your implementation
+//}
 
-SmallShell::~SmallShell()
-{
-    // TODO: add your implementation
-}
+SmallShell::~SmallShell() = default;
+//{
+//    // TODO: add your implementation
+//}
 
 /**
  * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
@@ -103,43 +103,43 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
 
     string cmd_s = _trim(string(cmd_line));
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+//    bool isBackground = _isBackgroundCommand(cmd_s.c_str());
+//    _removeBackgroundSign(firstWord.c_str());
+    // TODO: check for aliases here, find way to remove & with function above
 
-    // TODO: check for aliases here
-
-    string firstWordNoAmp = _removeBackgroundSign(firstWord);
     // single word commands
-    // TODO: handle & at end of line
-    if (firstWordNoAmp.compare("pwd") == 0)
+    if (firstWord == "pwd")
     {
-        return new GetCurrDirCommand();
-    }
-    else if (firstWordNoAmp.compare("showpid") == 0)
+        return new GetCurrDirCommand(nullptr);
+    } //done
+    else if (firstWord == "showpid")
     {
-        return new ShowPidCommand();
-    }
-    else if (firstWordNoAmp.compare("jobs") == 0)
+        return new ShowPidCommand(nullptr);
+    } //done
+    else if (firstWord == "jobs")
     {
-        return new JobsCommand(jobsList);
+        return new JobsCommand(nullptr, &jobsList);
     }
-    else if (firstWordNoAmp.compare("sysinfo") == 0)
-    {
-        return new SysInfoCommand();
-    }
+//    else if (firstWord == "sysinfo")
+//    {
+//        return new SysInfoCommand();
+//    }
 
     string restOfWords = cmd_s.substr(cmd_s.find_first_of(" "), cmd_s.find_last_of(" \n"));
-    // multi word commands
-    if (firstWordNoAmp.compare("chprompt") == 0)
-    {
-        return new SetPromptCommand(restOfWords.c_str());
-    }
-    else if (firstWordNoAmp.compare("cd") == 0)
-    {
-        return new ChangeDirCommand(restOfWords.c_str(), &this->previousUsedPath);
-    }
 
-    else if (firstWordNoAmp.compare("fg") == 0)
+    // multi-word commands
+    if (firstWord == "chprompt")
     {
-        return new ForegroundCommand(restOfWords.c_str(), &this->jobsList);
+        return new SetPromptCommand(cmd_line);
+    } //done
+    else if (firstWord == "cd")
+    {
+        return new ChangeDirCommand(cmd_line, this->previousUsedPath);
+    } //done
+
+    else if (firstWord == "fg")
+    {
+        return new ForegroundCommand(cmd_line, &this->jobsList);
     }
     // else if (firstWordNoAmp.compare("kill") == 0)
     // {
@@ -169,35 +169,111 @@ void SmallShell::executeCommand(const char *cmd_line)
     // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
 
-void GetCurrDirCommand::execute()
-{
-    char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof(cwd)) != nullptr)
-    {
-        std::cout << cwd << std::endl;
+SetPromptCommand::SetPromptCommand(const char *cmdLine) : BuiltInCommand(cmdLine) {
+    char* args[COMMAND_MAX_ARGS];
+    int i = _parseCommandLine(cmdLine, args);
+    if(i == 1){ // no arguments (just command)
+        char prompt[] = "smash";
+        setCmdLine(prompt);
+    } else { //ignore arguments aside from first
+        setCmdLine(args[1]);
     }
-    else
-    {
-        perror("smash error: getcwd failed");
-    }
-}
-void ShowPidCommand::execute()
-{
-    std::cout << "smash pid is " << getpid() << std::endl;
-}
-
-SetPromptCommand::SetPromptCommand(const string &givenPrompt)
-{
-    this->givenPrompt = givenPrompt;
-}
-SetPromptCommand::SetPromptCommand()
-{
-    this->givenPrompt = "smash";
 }
 
 void SetPromptCommand::execute()
 {
     SmallShell &smash = SmallShell::getInstance();
-    smash.setPreviousUsedPath(getcwd());
-    smash.setPompt(givenPrompt);
+    smash.setPrompt(getCmdLine());
+}
+
+ChangeDirCommand::ChangeDirCommand(const char *cmdLine, const char *previousUsed) : BuiltInCommand(cmdLine) {
+    char* args[COMMAND_MAX_ARGS];
+    int i = _parseCommandLine(cmdLine, args);
+
+    if(i < 2){
+        getcwd(newTargetPath, _MAX_PATH);
+        strcpy(previousUsedPath,previousUsed);
+    }
+    if(i > 2){
+        throw runtime_error("smash error: cd: too many arguments");
+    }
+    else if(i == 2){
+        if(strcmp("-", args[1]) == 0 && previousUsed == nullptr){
+            throw runtime_error("smash error: cd: OLDPWD not set");
+        } else if(strcmp("-", args[1]) == 0){ //set prev to current
+            getcwd(previousUsedPath, _MAX_PATH);
+            strcpy(newTargetPath,previousUsed);
+        }
+    }
+}
+
+void ChangeDirCommand::execute() {
+    if (chdir(newTargetPath) == 0)
+    {
+        SmallShell &smash = SmallShell::getInstance();
+        smash.setPreviousUsedPath(previousUsedPath);
+    }
+    else
+    {
+        // TODO: catch this exception with "smash error: cd: invalid path"
+        throw runtime_error("smash error: cd: invalid path");
+    }
+}
+
+ForegroundCommand::ForegroundCommand(const char *cmd_line, JobsList *jobsList) : BuiltInCommand(cmd_line) {
+    this->jobsList = jobsList;
+    char* args[COMMAND_MAX_ARGS];
+    int i = _parseCommandLine(cmd_line, args);
+
+    if (i == 1){ //no arguments
+        targetJobId = jobsList->getLastJob()->jobId;
+    }
+    else if(i == 2){ // 1 argument
+        targetJobId = stoi(args[1]);
+    }
+    else{
+        throw runtime_error("smash error: fg: invalid arguments");
+    }
+}
+
+void ForegroundCommand::execute() {
+    if (jobsList->jobs.empty())
+    {
+        throw runtime_error("smash error: fg: jobs list is empty");
+    }
+
+    try{
+        jobsList->jobs.at(targetJobId);
+    }
+    catch(...){
+        throw runtime_error("smash error: fg: job-id " + to_string(targetJobId) + " does not exist");
+    }
+
+    //job exists
+    int pid = fork();
+    if (pid == 0)
+    {
+        std::cout << "[" << getpid() << "] " << jobsList->jobs[targetJobId].cmd->getCmdLine() << std::endl;
+        execv(jobsList->jobs[targetJobId].cmd->getCmdLine(), nullptr);
+        perror("smash error: fg: execv failed");
+        exit(EXIT_FAILURE);
+    }
+    else if (pid > 0)
+    {
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status))
+        {
+            // normal exit
+            jobsList->removeJobById(targetJobId);
+        }
+        else
+        {
+            // something else
+            throw runtime_error("smash error: fg: execv failed");
+        }
+    }
+    else{
+        throw runtime_error("smash error: fg: fork failed");
+    }
 }
