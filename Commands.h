@@ -121,18 +121,36 @@ public:
 class ChangeDirCommand : public BuiltInCommand
 {
     // TODO: Add your data members public:
-    char newTargetPath[MAX_READ_LOCKS]; // on execute go here
-public:
-    ChangeDirCommand(const char *restOfWords)
-    {
-        // TODO: parse restOfWords to get the target path, and handle spaces
-        newTargetPath = restOfWords; // after "cd "
-    };
+    char newTargetPath[_MAX_PATH]; // on execute go here
+    string *previousUsedPath;
 
-    ChangeDirCommand()
+public:
+    ChangeDirCommand(const char *restOfWords, string *previousUsedPath);
+    previousUsedPath(previousUsedPath)
     {
-        SmallShell &smash = SmallShell::getInstance();
-        newTargetPath = smash.getPreviousUsedPath();
+        string args[COMMAND_MAX_ARGS]{"\n"};
+        _parseCommandLine(restOfWords, args);
+
+        if (args[0] != "\n")
+        {
+            if (args[1].compare("\n") == 0)
+            {
+                throw std::exception("smash error: cd: too many arguments");
+            }
+
+            else if (args[1].compare("-") == 0)
+            {
+                newTargetPath = *previousUsedPath;
+            }
+            else
+            {
+                newTargetPath = args[1];
+            }
+        }
+        // TODO: parse restOfWords to get the target path, and handle spaces
+        // newTargetPath = restOfWords; // after "cd "
+
+        // previousUsedPath = previousUsedPath;
     };
 
     virtual ~ChangeDirCommand()
@@ -147,15 +165,23 @@ public:
             // TODO: catch this exception
             throw std::exception("smash error: cd: OLDPWD not set");
         }
-        smash.updatePreviousUsedPath();
-        chdir(newTargetPath);
+
+        string pathBeforeChange = getcwd(*previousUsedPath, sizeof(*previousUsedPath));
+        if (chdir(newTargetPath) == 0)
+        {
+            *previousUsedPath = pathBeforeChange;
+        }
+        else
+        {
+            throw std::exception("smash error: cd: invalid path");
+        }
     }
 };
 
 class GetCurrDirCommand : public BuiltInCommand
 {
 public:
-    GetCurrDirCommand(const char *cmd_line);
+    GetCurrDirCommand();
 
     virtual ~GetCurrDirCommand()
     {
@@ -167,7 +193,7 @@ public:
 class ShowPidCommand : public BuiltInCommand
 {
 public:
-    ShowPidCommand(const char *cmd_line);
+    ShowPidCommand();
 
     virtual ~ShowPidCommand()
     {
@@ -330,7 +356,32 @@ class KillCommand : public BuiltInCommand
 public:
     KillCommand(string &restOfWord, JobsList *jobs)
     {
+        if (restOfWords.length() == 0 || restOfWords[0] != '-')
+        {
+            throw std::exception("smash error: kill: invalid arguments");
+        }
 
+        int spaceCount = 0;
+        for (int i = 1; i < restOfWords.length(); i++)
+        {
+            if (restOfWords[i] == ' ')
+            {
+                spaceCount++;
+                if (spaceCount > 1)
+                {
+                    throw std::exception("smash error: fg: invalid arguments");
+                }
+            }
+            else if (restOfWords[i] < '0' || restOfWords[i] > '9')
+            {
+                throw std::exception("smash error: fg: invalid arguments");
+            }
+        }
+
+        if (spaceCount != 1)
+        {
+            throw std::exception("smash error: fg: invalid arguments");
+        }
         int argCount = sscanf(restOfWord, "-%d %d", &signal, &jobId);
         if (argCount != 2)
         {
@@ -363,19 +414,28 @@ class ForegroundCommand : public BuiltInCommand
 {
     // TODO: Add your data members
     size_t targetJobId;
-
+    JobsList *jobsList
 public:
-    ForegroundCommand(string arguments)
+    ForegroundCommand(string arguments, JobsList *jobsList):jobsList(JobsList)
     {
+
+        string args[COMMAND_MAX_ARGS]{"\n"};
+        _parseCommandLine(restOfWords, args);
         // count arguments
-        if (arguments.length() == 0)
+        if (args[0] == "\n")
         {
             // no arguments
             targetJobId = jobs->getLastJob();
         }
-        else
+        else if(args[2] != "\n")
         {
-            targetJobId = stoi(arguments);
+
+            // targetJobId = stoi(arguments);
+        }
+        else if(args[1] != "\n")
+        {
+            // targetJobId = stoi(arguments);
+            targetJobId = stoi(args[1]);
         }
     };
 
@@ -385,18 +445,18 @@ public:
 
     void execute() override
     {
-        JobsList *jobs = &(SmallShell::getInstance().getJobsList());
 
-        if (jobs->jobs.size() == 0)
+        if (jobsList->jobs.size() == 0)
         {
             throw std::exception("smash error: fg: jobs list is empty");
         }
 
-        if (jobs.contains(targetJobId) == 0)
+        if (jobsList->jobs.contains(targetJobId) == 0)
         {
             throw std::exception("smash error: fg: job-id " + targetJobId + " does not exist");
         }
 
+        //job exists
         int pid = fork();
         if (pid == 0)
         {
@@ -417,8 +477,11 @@ public:
             else
             {
                 // something else
-                throw std::exception("smash error: fg: fork failed");
+                throw std::exception("smash error: fg: execv failed");
             }
+        }
+        else{
+                throw std::exception("smash error: fg: fork failed");
         }
     };
 };
@@ -471,6 +534,10 @@ public:
     void execute() override
     {
         struct utsname name;
+
+        // TODO: change to
+
+        // open /proc and read from there
         if (uname(&name) == 0)
         {
             std::cout << "System: " << name.sysname << std::endl;
@@ -484,36 +551,36 @@ public:
             std::cerr << "smash error: sysinfo: failed to retrieve basic info" << std::endl;
         }
 
-            std::ifstream stat_file("/proc/stat");
-            std::string line;
-            long boot_time_sec = 0;
+        std::ifstream stat_file("/proc/stat");
+        std::string line;
+        long boot_time_sec = 0;
 
-            // Search for the "btime" line in /proc/stat
-            while (std::getline(stat_file, line))
+        // Search for the "btime" line in /proc/stat
+        while (std::getline(stat_file, line))
+        {
+            if (line.substr(0, 6) == "btime ")
             {
-                if (line.substr(0, 6) == "btime ")
-                {
-                    std::stringstream ss(line.substr(6));
-                    ss >> boot_time_sec;
-                    break;
-                }
+                std::stringstream ss(line.substr(6));
+                ss >> boot_time_sec;
+                break;
             }
-
-            if (boot_time_sec == 0)
-            {
-                return "N/A"; // Error reading file
-            }
-
-            // Convert seconds since epoch to a formatted string
-            std::time_t boot_time_t = boot_time_sec;
-            struct tm *tm_info = std::localtime(&boot_time_t);
-
-            char buffer[20];
-            // Format: YYYY-MM-DD HH:MM:SS
-            std::strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
-
-            std::cout << "Boot Time: " << std::string(buffer) << std::endl;
         }
+
+        if (boot_time_sec == 0)
+        {
+            return "N/A"; // Error reading file
+        }
+
+        // Convert seconds since epoch to a formatted string
+        std::time_t boot_time_t = boot_time_sec;
+        struct tm *tm_info = std::localtime(&boot_time_t);
+
+        char buffer[20];
+        // Format: YYYY-MM-DD HH:MM:SS
+        std::strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
+
+        std::cout << "Boot Time: " << std::string(buffer) << std::endl;
+    }
 };
 
 class SmallShell

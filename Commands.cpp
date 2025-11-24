@@ -102,124 +102,57 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
     // For example:
 
     string cmd_s = _trim(string(cmd_line));
-    string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n")); // maybe fix
+    string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
-    //TODO: check for aliases here
+    // TODO: check for aliases here
 
+    string firstWordNoAmp = _removeBackgroundSign(firstWord);
     // single word commands
-    //TODO: handle & at end of line
-    if (firstWord.compare("pwd") == 0 || firstWord.compare("pwd&") == 0 )
+    // TODO: handle & at end of line
+    if (firstWordNoAmp.compare("pwd") == 0)
     {
-        return new GetCurrDirCommand(cmd_line);
+        return new GetCurrDirCommand();
     }
-    else if (firstWord.compare("showpid") == 0)
+    else if (firstWordNoAmp.compare("showpid") == 0)
     {
-        return new ShowPidCommand(cmd_line);
+        return new ShowPidCommand();
     }
-    else if (firstWord.compare("jobs") == 0)
+    else if (firstWordNoAmp.compare("jobs") == 0)
     {
-        return new JobsCommand(cmd_line);
+        return new JobsCommand(jobsList);
     }
-    else if(firstWord.compare("sysinfo")==0)
+    else if (firstWordNoAmp.compare("sysinfo") == 0)
     {
         return new SysInfoCommand();
     }
 
-    string restOfWords = cmd_s.substr(cmd_s.find_first_of(" "), cmd_s.find_last_of(" \n"), );
-    restOfWords = _trim(restOfWords);
+    string restOfWords = cmd_s.substr(cmd_s.find_first_of(" "), cmd_s.find_last_of(" \n"));
     // multi word commands
-    if (firstWord.compare("chprompt") == 0)
+    if (firstWordNoAmp.compare("chprompt") == 0)
     {
-        if (restOfWords.length() > 0)
-        {
-            return new SetPromptCommand(restOfWords.c_str());
-        }
-        else
-        {
-            // reset -set to smash
-            return new SetPromptCommand();
-        }
+        return new SetPromptCommand(restOfWords.c_str());
     }
-    else if (firstWord.compare("cd") == 0)
+    else if (firstWordNoAmp.compare("cd") == 0)
     {
-        if (restOfWords.compare("-") == 0)
-        {
-            return new ChangeDirCommand();
-        }
-
-        // check if more than 1 argument in restOfWords
-        string restOfWords = cmd_s.substr(cmd_s.find_first_of(" "), cmd_s.find_last_of(" \n"), );
-        if (restOfWords.find(" ") != string::npos)
-        {
-            // more than 1 argument
-            throw std::exception("smash error: cd: too many arguments");
-        }
-        else
-        {
-            return new ChangeDirCommand(restOfWords.c_str());
-        }
+        return new ChangeDirCommand(restOfWords.c_str(), &this->previousUsedPath);
     }
 
-    else if (firstWord.compare("fg") == 0)
+    else if (firstWordNoAmp.compare("fg") == 0)
     {
-        // with given id
-        if (restOfWords.length() > 0)
-        {
-            for (int i = 0; i < restOfWords.length(); i++)
-            {
-                if (restOfWords[i] < '0' || restOfWords[i] > '9')
-                {
-                    throw std::exception("smash error: fg: invalid arguments");
-                }
-            }
-
-            return new ForegroundCommand(restOfWords.c_str(), &this->jobsList);
-        }
-        return new ForegroundCommand();
-
-        return new JobsCommand(cmd_line);
+        return new ForegroundCommand(restOfWords.c_str(), &this->jobsList);
     }
-    else if (firstWord.compare("kill") == 0)
-    {
-        // with given id
-        if (restOfWords.length() > 0)
-        {
-            if (restOfWords[0] != '-')
-            {
-                throw std::exception("smash error: kill: invalid arguments");
-            }
+    // else if (firstWordNoAmp.compare("kill") == 0)
+    // {
+    //     // with given id
+    //   //TODO: 
+    //     return new KillCommand(restOfWords.c_str(), &this->jobsList);
+    // }
+    // else if (firstWord.compare("quit") == 0)
+    // {
+    //     // TODO implement
+    //     return new QuitCommand(restOfWords, &this->jobsList);
+    // }
 
-            int spaceCount = 0;
-            for (int i = 1; i < restOfWords.length(); i++)
-            {
-                if (restOfWords[i] == ' ')
-                {
-                    spaceCount++;
-                    if (spaceCount > 1)
-                    {
-                        throw std::exception("smash error: fg: invalid arguments");
-                    }
-                }
-                else if (restOfWords[i] < '0' || restOfWords[i] > '9')
-                {
-                    throw std::exception("smash error: fg: invalid arguments");
-                }
-            }
-
-            if (spaceCount != 1)
-            {
-                throw std::exception("smash error: fg: invalid arguments");
-            }
-            return new KillCommand(restOfWords.c_str(), &this->jobsList);
-        }
-    }
-    else if (firstWord.compare("quit") == 0)
-    {
-        //TODO implement
-        return new QuitCommand(restOfWords, &this->jobsList);
-    }
-    // else if ...
-    // .....
     // else {
     //   return new ExternalCommand(cmd_line);
     // }
