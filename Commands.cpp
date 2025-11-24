@@ -108,6 +108,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
 //    _removeBackgroundSign(firstWord.c_str());
     // TODO: check for aliases here, find way to remove & with function above
 
+    printf("first word: %s\n", firstWord.c_str());
     // single word commands
     if (firstWord == "pwd")
     {

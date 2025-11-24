@@ -144,7 +144,7 @@ public:
 
     virtual ~GetCurrDirCommand() = default;
 
-    void execute() override;
+    void execute() override{};
 }; //done
 
 class ShowPidCommand : public BuiltInCommand
