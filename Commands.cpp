@@ -4,9 +4,10 @@
 #include <vector>
 #include <sstream>
 #include <sys/wait.h>
+#include <limits.h>
 #include <iomanip>
 #include "Commands.h"
-
+#include <unistd.h>
 using namespace std;
 
 const std::string WHITESPACE = " \n\r\t\f\v";
@@ -191,8 +192,9 @@ ChangeDirCommand::ChangeDirCommand(const char *cmdLine, const char *previousUsed
     int i = _parseCommandLine(cmdLine, args);
 
     if(i < 2){
-        getcwd(newTargetPath, _MAX_PATH);
-        strcpy(previousUsedPath,previousUsed);
+        getcwd(newTargetPath, PATH_MAX);
+
+        previousUsedPath= strdup(previousUsed);
     }
     if(i > 2){
         throw runtime_error("smash error: cd: too many arguments");
@@ -201,7 +203,7 @@ ChangeDirCommand::ChangeDirCommand(const char *cmdLine, const char *previousUsed
         if(strcmp("-", args[1]) == 0 && previousUsed == nullptr){
             throw runtime_error("smash error: cd: OLDPWD not set");
         } else if(strcmp("-", args[1]) == 0){ //set prev to current
-            getcwd(previousUsedPath, _MAX_PATH);
+            getcwd(previousUsedPath, PATH_MAX);
             strcpy(newTargetPath,previousUsed);
         }
     }

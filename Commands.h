@@ -4,7 +4,8 @@
 
 #include <vector>
 #include <map>
-
+#include <string.h>
+#include <unistd.h>
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 using namespace std;
@@ -17,7 +18,7 @@ class Command
 public:
     Command(const char *cmd_line)
     {
-        strcpy(this->cmd_line, cmd_line);
+        this->cmd_line = strdup(cmd_line);
     };
 
     virtual ~Command() = default;
@@ -143,17 +144,7 @@ public:
 
     virtual ~GetCurrDirCommand() = default;
 
-    void execute() override{
-        char cwd[_MAX_PATH];
-        if (getcwd(cwd, sizeof(cwd)) != nullptr)
-        {
-            std::cout << cwd << std::endl;
-        }
-        else
-        {
-            perror("smash error: getcwd failed");
-        }
-    };
+    void execute() override;
 }; //done
 
 class ShowPidCommand : public BuiltInCommand
@@ -212,9 +203,14 @@ public:
     map<int, JobEntry> jobs;
 
 public:
-    JobsList();
+    JobsList()= default;
 
-    ~JobsList();
+    ~JobsList(){
+        for (auto &[id, job] : jobs)
+        {
+            delete job.cmd;
+        }
+    };
 
     void addJob(Command *cmd, bool isFinished = false)
     {
@@ -242,7 +238,7 @@ public:
         }
     };
 
-    void killAllJobs();
+    // void killAllJobs(){};
 
     void removeFinishedJobs()
     {
@@ -471,7 +467,7 @@ class SmallShell
 private:
     // TODO: Add your data members
 
-    char previousUsedPath[_MAX_PATH] = {0};
+    char* previousUsedPath = "\n";
 
     string prompt = "smash";
     JobsList jobsList;
@@ -500,9 +496,9 @@ public:
     string getPrompt(){
         return prompt;
     }
-    void setPreviousUsedPath(const char *previousUsed)
+    void setPreviousUsedPath(char *previousUsed)
     {
-        strcpy(previousUsedPath, previousUsed);
+        previousUsedPath = strdup(previousUsed);
     }
     char* getPreviousUsedPath()
     {
