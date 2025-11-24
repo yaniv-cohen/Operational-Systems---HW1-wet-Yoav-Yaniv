@@ -144,7 +144,7 @@ public:
     virtual ~GetCurrDirCommand() = default;
 
     void execute() override{
-        char cwd[PATH_MAX];
+        char cwd[_MAX_PATH];
         if (getcwd(cwd, sizeof(cwd)) != nullptr)
         {
             std::cout << cwd << std::endl;
@@ -471,7 +471,7 @@ class SmallShell
 private:
     // TODO: Add your data members
 
-    char previousUsedPath[PATH_MAX] = {0};
+    char previousUsedPath[_MAX_PATH] = {0};
 
     string prompt = "smash";
     JobsList jobsList;
