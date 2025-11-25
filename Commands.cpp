@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <string.h>
+#include <cstring>
 #include <iostream>
 #include <vector>
 #include <sstream>
@@ -8,6 +9,7 @@
 #include <iomanip>
 #include "Commands.h"
 #include <unistd.h>
+
 using namespace std;
 
 const std::string WHITESPACE = " \n\r\t\f\v";
@@ -22,6 +24,15 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 #define FUNC_ENTRY()
 #define FUNC_EXIT()
 #endif
+
+
+void printAllArgs(char** args){
+    int i = 0;
+    while(args[i] != nullptr){
+        std::cout << "arg " << i << ": " << args[i] << std::endl;
+        i++;
+    }
+}
 
 string _ltrim(const std::string &s)
 {
@@ -112,11 +123,11 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
     // single word commands
     if (firstWord == "pwd")
     {
-        return new GetCurrDirCommand(nullptr);
+        return new GetCurrDirCommand(cmd_line);
     } //done
     else if (firstWord == "showpid")
     {
-        return new ShowPidCommand(nullptr);
+        return new ShowPidCommand(cmd_line);
     } //done
     else if (firstWord == "jobs")
     {
@@ -127,7 +138,6 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
 //        return new SysInfoCommand();
 //    }
 
-    string restOfWords = cmd_s.substr(cmd_s.find_first_of(" "), cmd_s.find_last_of(" \n"));
 
     // multi-word commands
     if (firstWord == "chprompt")
@@ -162,11 +172,27 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
     return nullptr;
 }
 
+void GetCurrDirCommand::execute()
+{
+    printf("in get curr dir\n");
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd)) != nullptr)
+    {
+        std::cout << cwd << std::endl;
+    }
+    else
+    {
+        perror("smash error: getcwd failed");
+    }
+}
 void SmallShell::executeCommand(const char *cmd_line)
 {
     // TODO: Add your implementation here
     // for example:
+
+    std::cout << "smash: cmd_line " << cmd_line << std::endl;
     Command *cmd = CreateCommand(cmd_line);
+    std::cout << "smash: executing command: " << cmd_line << std::endl;
     cmd->execute();
     // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
@@ -175,8 +201,7 @@ SetPromptCommand::SetPromptCommand(const char *cmdLine) : BuiltInCommand(cmdLine
     char* args[COMMAND_MAX_ARGS];
     int i = _parseCommandLine(cmdLine, args);
     if(i == 1){ // no arguments (just command)
-        char prompt[] = "smash";
-        setCmdLine(prompt);
+        setCmdLine("smash");
     } else { //ignore arguments aside from first
         setCmdLine(args[1]);
     }
@@ -189,13 +214,29 @@ void SetPromptCommand::execute()
 }
 
 ChangeDirCommand::ChangeDirCommand(const char *cmdLine, const char *previousUsed) : BuiltInCommand(cmdLine) {
+
+    // char* newTargetPath;
+    // char* previousUsedPath;
+    newTargetPath = new char[PATH_MAX];
+    previousUsedPath = new char[PATH_MAX];
+
     char* args[COMMAND_MAX_ARGS];
+    std::cout <<"|" <<cmdLine << std::endl;
     int i = _parseCommandLine(cmdLine, args);
 
+    printAllArgs(args);
     if(i < 2){
+        std::cout << "no arguments to cd\n";
         getcwd(newTargetPath, PATH_MAX);
+        if(previousUsed != nullptr){
 
-        previousUsedPath= strdup(previousUsed);
+        strcpy(previousUsedPath, previousUsed);
+        }
+        else{
+        std::cout << "no arguments to cd4\n";
+
+        previousUsedPath = nullptr;
+        }
     }
     if(i > 2){
         throw runtime_error("smash error: cd: too many arguments");
@@ -207,13 +248,29 @@ ChangeDirCommand::ChangeDirCommand(const char *cmdLine, const char *previousUsed
             getcwd(previousUsedPath, PATH_MAX);
             strcpy(newTargetPath,previousUsed);
         }
+        else{
+            getcwd(previousUsedPath, PATH_MAX);
+            strcpy(newTargetPath, args[1]);
+        }
     }
 }
 
 void ChangeDirCommand::execute() {
+
+    std::cout << "newTargetPath:" <<newTargetPath << strlen(newTargetPath)<< std::endl;
+    for (size_t i = 0; i < strlen(newTargetPath); i++)
+    {
+        if(newTargetPath[i]=="\n"){
+            newTargetPath[i]='\0';
+            break;
+        }
+    }
+    
     if (chdir(newTargetPath) == 0)
     {
+        std::cout << "smash: about to change directory to " << newTargetPath << std::endl;
         SmallShell &smash = SmallShell::getInstance();
+        std::cout << "smash: previous used path is " << previousUsedPath << std::endl;
         smash.setPreviousUsedPath(previousUsedPath);
     }
     else

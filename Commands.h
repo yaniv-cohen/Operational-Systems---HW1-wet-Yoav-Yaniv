@@ -5,7 +5,9 @@
 #include <vector>
 #include <map>
 #include <string.h>
+#include <cstring>
 #include <unistd.h>
+
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 using namespace std;
@@ -18,10 +20,13 @@ class Command
 public:
     Command(const char *cmd_line)
     {
-        this->cmd_line = strdup(cmd_line);
+        this->cmd_line = new char[COMMAND_MAX_LENGTH];
+        strcpy(this->cmd_line, cmd_line);
     };
 
-    virtual ~Command() = default;
+    virtual ~Command() {
+        delete[] cmd_line;
+    };
 
     virtual void execute() = 0;
 
@@ -40,7 +45,9 @@ public:
 class BuiltInCommand : public Command
 {
 public:
-    BuiltInCommand(const char *cmd_line) : Command(cmd_line){};
+    BuiltInCommand(const char *cmd_line) : Command(cmd_line){
+        std::cout << "in BuiltInCommand constructor\n" << std::endl;
+    };
 
     virtual ~BuiltInCommand() = default;
 //    {
@@ -132,7 +139,10 @@ public:
     ChangeDirCommand(const char *cmdLine, const char *previousUsed);
 
 
-    virtual ~ChangeDirCommand() = default;
+    virtual ~ChangeDirCommand() {
+        delete[] newTargetPath;
+        delete[] previousUsedPath;
+    };
 
     void execute() override;
 }; //done
@@ -144,7 +154,7 @@ public:
 
     virtual ~GetCurrDirCommand() = default;
 
-    void execute() override{};
+    void execute() override;
 }; //done
 
 class ShowPidCommand : public BuiltInCommand
@@ -498,7 +508,7 @@ public:
     }
     void setPreviousUsedPath(char *previousUsed)
     {
-        previousUsedPath = strdup(previousUsed);
+        previousUsedPath = previousUsed;
     }
     char* getPreviousUsedPath()
     {
