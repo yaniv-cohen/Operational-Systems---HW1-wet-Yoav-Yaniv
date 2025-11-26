@@ -164,6 +164,15 @@ public:
 //    void execute() override;
 //};
 
+class DoNothingCommand : public BuiltInCommand
+{
+    public:
+    DoNothingCommand(const char *cmdLine):BuiltInCommand(cmdLine){};
+
+    virtual ~DoNothingCommand()=default;
+
+    void execute() override{};
+};
 class ChangeDirCommand : public BuiltInCommand
 {
     // TODO: Add your data members public:

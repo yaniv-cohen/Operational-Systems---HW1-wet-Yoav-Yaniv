@@ -110,18 +110,25 @@ SmallShell::~SmallShell() = default;
 /**
  * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
  */
-Command *SmallShell::CreateCommand(const char *cmd_line)
+Command *SmallShell::CreateCommand(const char *cmd_line_raw)
 {
-    // For example:
+    char cmd_line[COMMAND_MAX_LENGTH];
+    strcpy(cmd_line, cmd_line_raw);
 
-    string cmd_s = _trim(string(cmd_line));
-    string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
-    bool isBackground = _isBackgroundCommand(cmd_s.c_str());
-    printf("pre remove: %s\n", cmd_s);
-  
-    
-    _removeBackgroundSign(cmd_s);
-    printf("post remove: %s\n", cmd_s);
+    if( strcmp(cmd_line, WHITESPACE.c_str())  ==0 ){
+        printf("cmd_line empty %d\n", cmd_line);
+        return new DoNothingCommand(cmd_line);
+    }
+
+
+    string trimmed = _trim(string(cmd_line));
+
+    bool isBackground = _isBackgroundCommand(cmd_line);
+    printf("isBackground = %d\n", isBackground);
+    string firstWord = trimmed.substr(0, trimmed.find_first_of(" \n"));
+    printf("pre remove: %s\n", cmd_line);
+    _removeBackgroundSign(cmd_line);
+    printf("post remove: %s\n", cmd_line);
 
     // TODO: check for aliases here, find way to remove & with function above
 
