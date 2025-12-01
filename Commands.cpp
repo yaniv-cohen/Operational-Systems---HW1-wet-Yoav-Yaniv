@@ -78,7 +78,7 @@ void _removeBackgroundSign(char *cmd_line)
 {
     const string str(cmd_line);
     // find last character other than spaces
-    unsigned int idx = str.find_last_not_of(WHITESPACE);
+    size_t idx = str.find_last_not_of(WHITESPACE);
     // if all characters are spaces then return
     if (idx == string::npos)
     {
@@ -116,7 +116,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line_raw)
     strcpy(cmd_line, cmd_line_raw);
 
     if( strcmp(cmd_line, WHITESPACE.c_str())  ==0 ){
-        printf("cmd_line empty %d\n", cmd_line);
+        printf("cmd_line empty %s\n", cmd_line);
         return new DoNothingCommand(cmd_line);
     }
 
@@ -232,7 +232,8 @@ SetPromptCommand::SetPromptCommand(const char *cmdLine) : BuiltInCommand(cmdLine
     int i = _parseCommandLine(cmdLine, args);
     if (i == 1)
     { // no arguments (just command)
-        setCmdLine("smash");
+        char name[] = "smash";
+        setCmdLine(name);
     }
     else
     { // ignore arguments aside from first
