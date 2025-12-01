@@ -115,10 +115,11 @@ Command *SmallShell::CreateCommand(const char *cmd_line_raw)
     char cmd_line[COMMAND_MAX_LENGTH];
     strcpy(cmd_line, cmd_line_raw);
 
-    if( strcmp(cmd_line, WHITESPACE.c_str())  ==0 ){
-        printf("cmd_line empty %s\n", cmd_line);
-        return new DoNothingCommand(cmd_line);
-    }
+    //TODO: empty command
+    // if( strcmp(cmd_line, WHITESPACE.c_str())  ==0 ){
+    //     printf("cmd_line empty %s\n", cmd_line);
+    //     return new DoNothingCommand(cmd_line);
+    // }
 
 
     string trimmed = _trim(string(cmd_line));
@@ -144,7 +145,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line_raw)
     } // done
     else if (firstWord == "jobs")
     {
-        return new JobsCommand(nullptr, &jobsList);
+        return new JobsCommand(cmd_line, &jobsList);
     }
     //    else if (firstWord == "sysinfo")
     //    {
@@ -259,7 +260,7 @@ ChangeDirCommand::ChangeDirCommand(const char *cmdLine, const char *previousUsed
     std::cout << "|" << cmdLine << std::endl;
     int i = _parseCommandLine(cmdLine, args);
 
-    printAllArgs(args);
+    // printAllArgs(args);
     if (i < 2)
     {
         std::cout << "no arguments to cd\n";
@@ -378,7 +379,7 @@ void ForegroundCommand::execute()
         if (WIFEXITED(status))
         {
             // normal exit
-            jobsList->removeJobById(targetJobId);
+             jobsList->jobs.erase(targetJobId);
         }
         else
         {
@@ -419,17 +420,19 @@ void ComplexExternalCommand::execute()
            int pid = fork();
            if(pid==0){
                 //child
-                char* const argv[] = {"/bin/bash", "-c",const_cast<char*>(getCmdLine()), NULL};
+                char*  argv[] = {"/bin/bash", "-c",const_cast<char*>(getCmdLine()), NULL};
                 execv(argv[0], argv ); 
                 perror("smash error: excecution failed");
+                return;
            }
            else if(pid>0){
                 //parent
                 // waitpid(pid, nullptr, 0);
                 std::cout << "not waiting"<<std::endl;
-                SmallShell::getInstance().getJobsList().addJob(this, false);
+                SmallShell::getInstance().getJobsList().addJob(this, pid, false);
                 std::cout << "added to joblist"<<std::endl;
                 SmallShell::getInstance().getJobsList().printJobsList();
+                return;
            }
            else{
                 perror("smash error: fork failed");
@@ -448,7 +451,7 @@ void SimpleExternalCommand::execute()
                 //child
                 char *args[COMMAND_MAX_ARGS];
                 _parseCommandLine(getCmdLine(), args);
-                printAllArgs(args);
+                // printAllArgs(args);
                 // char* const argv[] = {args , NULL};
                 execvp(args[0], args ); 
                 perror("smash error: excecution failed");
@@ -470,7 +473,7 @@ void SimpleExternalCommand::execute()
                 //child
                 char *args[COMMAND_MAX_ARGS];
                 _parseCommandLine(getCmdLine(), args);
-                printAllArgs(args);
+                // printAllArgs(args);
                 // char* const argv[] = {args , NULL};
                 execvp(args[0], args ); 
                 perror("smash error: excecution failed");
@@ -479,12 +482,26 @@ void SimpleExternalCommand::execute()
                 //parent
                 // waitpid(pid, nullptr, 0);
                 std::cout << "not waiting"<<std::endl;
-                SmallShell::getInstance().getJobsList().addJob(this, false);
+                SmallShell::getInstance().getJobsList().addJob(this, pid, false);
                 std::cout << "added to joblist"<<std::endl;
-                SmallShell::getInstance().getJobsList().printJobsList();
+                // SmallShell::getInstance().getJobsList().printJobsList();
            }
            else{
                 perror("smash error: fork failed");
            }
        }
 }
+
+void JobsList::removeFinishedJobs()
+    {
+    for (auto it = jobs.begin(); it != jobs.end() ; )
+        {
+            if (waitpid(it->second.pid, nullptr, WNOHANG) != 0)
+            {
+               it= jobs.erase(it);  
+            }
+            else{
+                ++it;
+            }
+        }
+    };

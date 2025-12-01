@@ -80,7 +80,7 @@ public:
                   << std::endl;
     };
 
-    virtual ~SimpleExternalCommand()=default;
+    virtual ~SimpleExternalCommand() = default;
 
     void execute() override;
 };
@@ -166,12 +166,12 @@ public:
 
 class DoNothingCommand : public BuiltInCommand
 {
-    public:
-    DoNothingCommand(const char *cmdLine):BuiltInCommand(cmdLine){};
+public:
+    DoNothingCommand(const char *cmdLine) : BuiltInCommand(cmdLine) {};
 
-    virtual ~DoNothingCommand()=default;
+    virtual ~DoNothingCommand() = default;
 
-    void execute() override{};
+    void execute() override {};
 };
 class ChangeDirCommand : public BuiltInCommand
 {
@@ -244,13 +244,14 @@ public:
     {
         // TODO: Add your data members
     public:
-        //         int pid = 0;
         int jobId = 1;
         bool isFinished = false;
+        int pid = 0;
         Command *cmd = nullptr;
 
         JobEntry() = default;
-        JobEntry(int jobId, Command *cmd, bool isFinished) : jobId(jobId), cmd(cmd), isFinished(isFinished) {};
+        JobEntry(int jobId, Command *cmd, bool isFinished, int pid) : jobId(jobId),
+                                                                      cmd(cmd), isFinished(isFinished), pid(pid) {};
     };
 
     // TODO: Add your data members
@@ -267,7 +268,7 @@ public:
         }
     };
 
-    void addJob(Command *cmd, bool isFinished = false)
+    void addJob(Command *cmd, int pid, bool isFinished = false)
     {
         int newJobId = -1;
         auto it = jobs.begin();
@@ -283,13 +284,12 @@ public:
         {
             throw runtime_error("Jobs full"); // ask what error to put for full jobs list
         }
-        jobs[newJobId] = JobEntry(newJobId, cmd, isFinished);
+        jobs[newJobId] = JobEntry(newJobId, cmd, isFinished, pid);
     };
 
     void printJobsList()
     {
         removeFinishedJobs();
-
         for (const auto &[id, job] : jobs)
         {
             std::cout << "[" << id << "] " << job.cmd->getCmdLine() << std::endl;
@@ -298,26 +298,14 @@ public:
 
     // void killAllJobs(){};
 
-    void removeFinishedJobs()
-    {
-        for (auto &[id, job] : jobs)
-        {
-            if (job.isFinished == 1)
-            {
-                removeJobById(id);
-            }
-        }
-    };
+    void removeFinishedJobs();
 
     JobEntry *getJobById(int jobId)
     {
         return &jobs.at(jobId);
     };
 
-    void removeJobById(int jobId)
-    {
-        jobs.erase(jobId);
-    };
+
 
     JobEntry *getLastJob()
     {
