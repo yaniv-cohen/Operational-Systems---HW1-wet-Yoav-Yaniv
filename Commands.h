@@ -7,6 +7,7 @@
 #include <string.h>
 #include <cstring>
 #include <unistd.h>
+#include <unordered_set>
 
 #define COMMAND_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -299,6 +300,8 @@ public:
     // void killAllJobs(){};
 
     void removeFinishedJobs();
+    
+    void removeJobById(const int jobId);
 
     JobEntry *getJobById(int jobId)
     {
@@ -333,75 +336,53 @@ public:
     };
 }; // done
 
-// class KillCommand : public BuiltInCommand
-//{
-//     // TODO: Add your data members
-//     int signal;
-//     int jobId;
-//
-// public:
-//     KillCommand(string &restOfWord, JobsList *jobs)
-//     {
-//         if (restOfWords.length() == 0 || restOfWords[0] != '-')
-//         {
-//             throw std::exception("smash error: kill: invalid arguments");
-//         }
-//
-//         int spaceCount = 0;
-//         for (int i = 1; i < restOfWords.length(); i++)
-//         {
-//             if (restOfWords[i] == ' ')
-//             {
-//                 spaceCount++;
-//                 if (spaceCount > 1)
-//                 {
-//                     throw std::exception("smash error: fg: invalid arguments");
-//                 }
-//             }
-//             else if (restOfWords[i] < '0' || restOfWords[i] > '9')
-//             {
-//                 throw std::exception("smash error: fg: invalid arguments");
-//             }
-//         }
-//
-//         if (spaceCount != 1)
-//         {
-//             throw std::exception("smash error: fg: invalid arguments");
-//         }
-//         int argCount = sscanf(restOfWord, "-%d %d", &signal, &jobId);
-//         if (argCount != 2)
-//         {
-//             throw std::exception("smash error: kill: invalid arguments");
-//         }
-//     };
-//
-//     virtual ~KillCommand()
-//     {
-//     }
-//
-//     void execute() override
-//     {
-//         if (JobsList->contains(jobId) == 0)
-//         {
-//             throw std::exception("smash error: kill: job-id " + jobId + " does not exist");
-//         }
-//         //
-//         int pid = JobsList->getJobById(jobId)->cmd;
-//         if (kill(pid, signal) == -1)
-//         {
-//             throw std::exception("smash error: kill: kill failed");
-//         }
-//
-//         // TODO: actually kill the process
-//     };
-// };
+ class KillCommand : public BuiltInCommand
+{
+     // TODO: Add your data members
+     int targetJobId;
+     int signalNumber;
+    JobsList* jobsList;
+ public:
+     KillCommand(const char *cmdLine, JobsList *jobsList);
+
+
+     virtual ~KillCommand()
+     {
+     };
+     
+     void execute() override {
+         // 1. Find and validate the job
+         JobsList::JobEntry* targetJob = jobsList->getJobById(targetJobId); // You'll need this method
+         
+         if (targetJob == nullptr) {
+             // This check must happen AFTER successful parsing
+             throw runtime_error("smash error: kill: job-id " + std::to_string(targetJobId) + " does not exist");
+         }
+         
+         pid_t pid = targetJob->pid;
+         
+         // 2. Send the signal
+         if (kill(pid, signalNumber) == -1) {
+             // Check for kill failure (e.g., permission denied)
+             perror("smash error: kill failed");
+             return;
+         }
+         
+         // 3. Output confirmation
+         cout << "signal number " << signalNumber << " was sent to pid " << pid << endl;
+         
+         // 4. Update job list state (for SIGKILL/SIGTERM)
+         // A robust shell would clean up the job list if SIGKILL (9) or SIGTERM (15) was sent,
+         // but typically cleanup is deferred to the removeFinishedJobs via waitpid in the main loop/signal handler.
+     };
+ };
 
 class ForegroundCommand : public BuiltInCommand
 {
     // TODO: Add your data members
     int targetJobId;
     JobsList *jobsList;
-
+    
 public:
     ForegroundCommand(const char *cmd_line, JobsList *jobsList);
 
@@ -411,42 +392,86 @@ public:
 
     void execute() override;
 };
+class QuitCommand : public BuiltInCommand
+{
+JobsList* jl;
+bool doNothing;
+public:
+    QuitCommand(const char *cmd_line, JobsList *jobsList);
+    
+    virtual ~QuitCommand()
+    {
+    }
+    
+    void execute() override;
+};
+ class AliasCommand : public BuiltInCommand
+{   map<string, string>* aliasesMap;
+     string newAliasName;
+     string newAliasCommand;
+     bool emptyAlias;
+ public:
+     AliasCommand(const char *cmd_line, map<string, string>* aliasesMap);
 
-// class AliasCommand : public BuiltInCommand
-//{
-// public:
-//     AliasCommand(const char *cmd_line);
+     virtual ~AliasCommand()
+     {
+     }
+    static bool isValidAliasName(string& s ){
+        for (char c : s) {
+            if((c<0 || c>9) && (c<'a' || c>'z') &&
+                    (c<'A' || c>'Z') && c!='_')
+                return false;
+        }
+        vector<string> illegals = {
+                "chprompt",
+                "showpid",
+                "pwd",
+                "cd",
+                "jobs",
+                "fg",
+                "quit",
+                "kill",
+                "alias",
+                "unalias",
+                "unsetenv",
+                "sysinfo",
+                ""
+        };
+        for (auto i : illegals) {
+            if(s.compare(i)==0) {
+                cout<< "illegal! "<< i << endl;
+                return false;
+            }
+        }
+        return true;
+     };
+     void execute() override;
+ };
 //
-//     virtual ~AliasCommand()
-//     {
-//     }
-//
-//     void execute() override;
-// };
-//
-// class UnAliasCommand : public BuiltInCommand
-//{
-// public:
-//     UnAliasCommand(const char *cmd_line);
-//
-//     virtual ~UnAliasCommand()
-//     {
-//     }
-//
-//     void execute() override;
-// };
-//
-// class UnSetEnvCommand : public BuiltInCommand
-//{
-// public:
-//     UnSetEnvCommand(const char *cmd_line);
-//
-//     virtual ~UnSetEnvCommand()
-//     {
-//     }
-//
-//     void execute() override;
-// };
+ class UnAliasCommand : public BuiltInCommand{
+     map<string, string>* aliasesMap;
+ public:
+     UnAliasCommand(const char *cmd_line, map<string, string>* aliasesMap);
+
+     virtual ~UnAliasCommand()
+     {
+     }
+
+     void execute() override{};
+ };
+
+ class UnSetEnvCommand : public BuiltInCommand
+{
+     unordered_set<string> envToUnset;
+ public:
+     UnSetEnvCommand(const char *cmd_line);
+
+     virtual ~UnSetEnvCommand()
+     {
+     }
+
+     void execute() override;
+ };
 //
 // class SysInfoCommand : public BuiltInCommand
 //{
@@ -518,6 +543,8 @@ private:
 
     string prompt = "smash";
     JobsList jobsList;
+    map<string, string> aliases;
+    
     SmallShell();
 
 public:
