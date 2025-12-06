@@ -115,16 +115,10 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     string current_cmd_str = _trim(string(cmd_line));
     size_t firstSpacePos = current_cmd_str.find_first_of(WHITESPACE);
     string firstWord = current_cmd_str.substr(0, firstSpacePos);
-    for (char c : firstWord) {
-        if(!isalnum(c) && c!= '_')
-        {
-        
-        }
-    }
     // 4. Check for Alias Substitution
     // Note: The 'aliases' map is assumed to be a member of SmallShell.
     auto alias_it = aliases.find(firstWord);
-    
+    //TODO: handle hi&
     if (alias_it != aliases.end()) {
         // Alias found!
         string alias_value = alias_it->second; // e.g., "ls -l"
@@ -156,9 +150,33 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     // 6. Remove the background sign (modifies cmd_line in place)
     _removeBackgroundSign(cmd_line);
 //    printf("post remove: %s\n", cmd_line);
-    
+
 //    printf("first word: %s\n", firstWord.c_str());
-    
+
+// Find the position of the redirection character
+    size_t redirect_pos = string(cmd_line).find_first_of('>');
+    // Check the position directly against std::string::npos
+    if (redirect_pos != std::string::npos) {
+        // Redirection character was found!
+        
+        // Optional: Add logic here to ensure it's not inside quotes if required by spec.
+        
+        // For now, assume a found '>' means redirection must be handled
+        return new RedirectionCommand(cmd_line);
+    }
+
+    //PIPE
+    size_t pipe_pos = string(cmd_line).find_first_of('|');
+    // Check the position directly against std::string::npos
+    if (pipe_pos != std::string::npos) {
+        // Redirection character was found!
+        
+        // Optional: Add logic here to ensure it's not inside quotes if required by spec.
+        
+        // For now, assume a found '>' means redirection must be handled
+        return new PipeCommand(cmd_line);
+    }
+//    std::cout << "find_first_of " << redirect_pos << std::endl;
     // --- Remainder of Command Identification Logic ---
     // single word commands
     if (firstWord == "pwd") {
@@ -191,24 +209,23 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         return new KillCommand(cmd_line, &this->jobsList);
     } else if (firstWord == "alias") {
         return new AliasCommand(cmd_line, &aliases);
-    }else if (firstWord == "unalias") {
+    } else if (firstWord == "unalias") {
         return new UnAliasCommand(cmd_line, &aliases);
-    }
-    else if (firstWord == "unsetenv") {
+    } else if (firstWord == "unsetenv") {
         return new UnSetEnvCommand(cmd_line);
     }
         // not built in command
         // not special command
     
     else {
-        std::cout << "not matched any built in command\n" << std::endl;
+//        std::cout << "not matched any built in command\n" << std::endl;
         if (string(cmd_line).find("*") == string::npos &&
             string(cmd_line).find("?") == string::npos) {
-            
-            std::cout << "smash: simpleExternal command" << std::endl;
+
+//            std::cout << "smash: simpleExternal command" << std::endl;
             return new SimpleExternalCommand(cmd_line, isBackground);
         } else {
-            std::cout << "smash: complexExternal command" << std::endl;
+//            std::cout << "smash: complexExternal command" << std::endl;
             
             return new ComplexExternalCommand(cmd_line, isBackground);
         }
@@ -217,7 +234,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
 }
 
 void GetCurrDirCommand::execute() {
-    printf("in get curr dir\n");
+//    printf("in get curr dir\n");
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) != nullptr) {
         std::cout << cwd << std::endl;
@@ -229,10 +246,10 @@ void GetCurrDirCommand::execute() {
 void SmallShell::executeCommand(const char* cmd_line) {
     // TODO: Add your implementation here
     // for example:
-    
-    std::cout << "smash: cmd_line " << cmd_line << std::endl;
+
+//    std::cout << "smash: cmd_line " << cmd_line << std::endl;
     Command* cmd = CreateCommand(cmd_line);
-    std::cout << "smash: executing command: " << cmd_line << std::endl;
+//    std::cout << "smash: executing command: " << cmd_line << std::endl;
     cmd->execute();
     // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
@@ -296,9 +313,9 @@ ChangeDirCommand::ChangeDirCommand(const char* cmdLine,
 }
 
 void ChangeDirCommand::execute() {
-    
-    std::cout << "newTargetPath:" << newTargetPath << strlen(newTargetPath)
-              << std::endl;
+
+//    std::cout << "newTargetPath:" << newTargetPath << strlen(newTargetPath)
+//              << std::endl;
     for (size_t i = 0; i < strlen(newTargetPath); i++) {
         if (newTargetPath[i] == '\n') {
             newTargetPath[i] = '\0';
@@ -351,7 +368,7 @@ ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList* jobsList)
 
 void ForegroundCommand::execute() {
 // 1. Find the job safely
-        auto it = jobsList->jobs.find(targetJobId);
+    auto it = jobsList->jobs.find(targetJobId);
     
     if (it == jobsList->jobs.end()) {
         //no such id
@@ -390,7 +407,6 @@ QuitCommand::QuitCommand(const char* cmd_line, JobsList* jobsList) :
     doNothing = false;
     if (strcmp(args[1], "kill") == 0) {
         jl = jobsList;
-        cout << "create quit command" << endl;
         jobsList->removeFinishedJobs();
         cout << "sending SIGKILL signal to " << jobsList->jobs.size()
              << " jobs: "
@@ -431,7 +447,7 @@ void ComplexExternalCommand::execute() {
         } else if (pid > 0) {
             //parent
             waitpid(pid, nullptr, 0);
-            std::cout << "finished waiting" << std::endl;
+//            std::cout << "finished waiting" << std::endl;
         } else {
             perror("smash error: fork failed");
         }
@@ -476,7 +492,7 @@ void SimpleExternalCommand::execute() {
         } else if (pid > 0) {
             //parent
             waitpid(pid, nullptr, 0);
-            std::cout << "finished waiting" << std::endl;
+//            std::cout << "finished waiting" << std::endl;
         } else {
             perror("smash error: fork failed");
         }
@@ -538,7 +554,7 @@ KillCommand::KillCommand(const char* cmdLine,
     
     // 2. Signal Number Parsing
     // Check if the signal argument starts with '-'
-    if (stoi(args[1])>= 0  || args[1][0] != '-') {
+    if (stoi(args[1]) >= 0 || args[1][0] != '-') {
         throw runtime_error("smash error: kill: invalid arguments");
     }
     
@@ -568,7 +584,8 @@ KillCommand::KillCommand(const char* cmdLine,
 
 AliasCommand::AliasCommand(const char* cmdLine,
                            map<string, string>* aliasesMap) : BuiltInCommand(
-        cmdLine), aliasesMap(aliasesMap) { // Note: pass map by pointer/reference
+        cmdLine), aliasesMap(
+        aliasesMap) { // Note: pass map by pointer/reference
     
     // Convert to std::string for easier manipulation
     string cmd = _trim(string(cmdLine));
@@ -578,7 +595,7 @@ AliasCommand::AliasCommand(const char* cmdLine,
     
     // Check if the command contains anything after "alias"
     if (firstSpace == string::npos) {
-        emptyAlias =true;
+        emptyAlias = true;
         // Case 1: "alias" (Only the command name)
         // This is not correct for the constructor; this logic should be in execute()
         // but for now, we set flags or store the map reference.
@@ -593,7 +610,8 @@ AliasCommand::AliasCommand(const char* cmdLine,
         // If there are arguments but no '=', it's either an error or a request
         // to check a single alias (like 'alias l'), which your spec may not require.
         // For simplicity, we only implement assignment or list-all.
-        throw runtime_error("smash error: alias: invalid arguments (missing '=')");
+        throw runtime_error(
+                "smash error: alias: invalid arguments (missing '=')");
     }
     
     // Case 2: "alias name='command'"
@@ -609,8 +627,10 @@ AliasCommand::AliasCommand(const char* cmdLine,
     commandDef = _trim(commandDef); // Clean up whitespace around the command
     
     // 3. Validation and Cleaning (Checking quotes)
-    if (commandDef.empty() || commandDef.front() != '\'' || commandDef.back() != '\'') {
-        throw runtime_error("smash error: alias: command must be enclosed in single quotes");
+    if (commandDef.empty() || commandDef.front() != '\'' ||
+        commandDef.back() != '\'') {
+        throw runtime_error(
+                "smash error: alias: command must be enclosed in single quotes");
     }
     
     // Store the cleaned alias name and the command content (inside the quotes)
@@ -626,9 +646,9 @@ AliasCommand::AliasCommand(const char* cmdLine,
 
 void AliasCommand::execute() {
     
-    if(emptyAlias){
-        for (auto &al: *aliasesMap) {
-            cout << al.first <<"='"<< al.second <<"'" << endl;
+    if (emptyAlias) {
+        for (auto& al: *aliasesMap) {
+            cout << al.first << "='" << al.second << "'" << endl;
         }
         return;
     }
@@ -636,13 +656,13 @@ void AliasCommand::execute() {
     
 };
 
-
-UnAliasCommand::UnAliasCommand(const char *cmd_line,map<string, string>* aliasesMap):
-        BuiltInCommand(cmd_line), aliasesMap(aliasesMap){
+UnAliasCommand::UnAliasCommand(const char* cmd_line,
+                               map<string, string>* aliasesMap) :
+        BuiltInCommand(cmd_line), aliasesMap(aliasesMap) {
     
     char* args[COMMAND_MAX_ARGS];
     int num_args = _parseCommandLine(cmd_line, args);
-    if(num_args==1){
+    if (num_args == 1) {
         //empty command
         perror("smash error: unalias: not enough arguments");
     }
@@ -653,24 +673,23 @@ UnAliasCommand::UnAliasCommand(const char *cmd_line,map<string, string>* aliases
     
 }
 
-UnSetEnvCommand::UnSetEnvCommand(const char* cmdLine):
-BuiltInCommand(cmdLine){
+UnSetEnvCommand::UnSetEnvCommand(const char* cmdLine) :
+        BuiltInCommand(cmdLine) {
     char* args[COMMAND_MAX_ARGS];
     int num_args = _parseCommandLine(cmdLine, args);
-    if(num_args==1){
+    if (num_args == 1) {
         perror("smash error: unsetenv: not enough arguments");
-    }
-    else{
+    } else {
         for (int i = 1; i < num_args; ++i) {
-        envToUnset.insert(args[i]);
+            envToUnset.insert(args[i]);
         }
     }
 }
 
 void UnSetEnvCommand::execute() {
-    
+    // TODO: fix this
     // Iterate over all requested variable names
-    for (const std::string& varName : this->envToUnset) {
+    for (const std::string& varName: this->envToUnset) {
         
         // The environment variable format is "VARNAME=VALUE".
         std::string prefix = varName + "=";
@@ -683,14 +702,14 @@ void UnSetEnvCommand::execute() {
             if (strncmp(environ[i], prefix.c_str(), prefix.length()) == 0) {
                 
                 // --- Variable found: Perform manual shift (Deletion) ---
-                cout<<"Variable found "<< environ[i] << endl;
+                cout << "Variable found " << environ[i] << endl;
                 int j = i;
                 // Shift all subsequent pointers up by one to overwrite the found entry.
                 do {
                     environ[j] = environ[j + 1];
                     j++;
                 } while (environ[j] != nullptr);
-                cout<<"now Variable found "<< environ[i] << endl;
+                cout << "now Variable found " << environ[i] << endl;
                 // We need to re-check the current index 'i' because it now holds the
                 // next environment variable.
                 i--;
@@ -698,5 +717,180 @@ void UnSetEnvCommand::execute() {
             }
             i++; // Move to the next environment entry
         }
+    }
+}
+
+RedirectionCommand::RedirectionCommand(const char* cmdLine) : Command(cmdLine) {
+    string cmdS = string(cmdLine);
+    int firstArrowIdx = cmdS.find_first_of('>');
+    int lastArrowIdx = cmdS.find_last_of('>');
+    if (firstArrowIdx == lastArrowIdx) {
+        isAppend = false;
+    } else if (firstArrowIdx + 1 == lastArrowIdx) {
+        isAppend = true;
+    } else {
+        perror("smash error: invalid arguments");
+    }
+//    cout<<"firstArrowIdx " <<firstArrowIdx <<" lastArrowIdx " << lastArrowIdx
+//    << "isAppend " << isAppend << endl;
+    
+    innerCommand = cmdS.substr(0, firstArrowIdx);
+    outerFile = _trim(cmdS.substr(lastArrowIdx + 1));
+//    cout << innerCommand << " into file: " << outerFile << endl;
+}
+
+void RedirectionCommand::execute() {
+    
+    pid_t pid = fork();
+    if (pid > 0) {
+//parent
+        waitpid(pid, nullptr, 0);
+    } else if (pid == 0) {
+//child
+        
+        int flags = O_WRONLY | O_CREAT;
+        if (isAppend) {
+            flags |= O_APPEND;
+        } else {
+            flags |= O_TRUNC;
+        }
+        int fd_out = open(outerFile.c_str(), flags, 0666);
+        if (fd_out < 0) {
+            perror("smash error: open failed");
+            _exit(1);
+        }
+
+// 3. Redirect stdout (File Descriptor 1) to the file
+        if (dup2(fd_out, 1) == -1) {
+            perror("smash error: dup2 failed");
+            close(fd_out);
+            _exit(1);
+        }
+        
+        Command* cmd = SmallShell::getInstance()
+                .CreateCommand(innerCommand.c_str());
+
+// Check if the command is a BuiltInCommand
+// Note: This assumes you have access to the BuiltInCommand class definition and
+// can use dynamic_cast (which requires RTTI/polymorphism).
+        auto* built_in_cmd = dynamic_cast<BuiltInCommand*>(cmd);
+        
+        if (built_in_cmd) {
+            // 2. Case: Built-in Command (e.g., showpid, cd, chprompt)
+            // Run the built-in command directly in the child process.
+            // Its output will be redirected via FD 1.
+            cmd->execute();
+            
+            // IMPORTANT: After the built-in command finishes, the child process must terminate.
+            delete cmd; // Clean up the Command object created by CreateCommand
+            _exit(0);   // Exit the child process!
+            
+        } else {
+            // 3. Case: External Command (or Complex Command)
+            // Use execl to replace the process image. The existing Command object
+            // (SimpleExternalCommand or ComplexExternalCommand) is not needed here;
+            // we use /bin/bash -c for guaranteed execution.
+            
+            // Clean up the Command object before exec, though exec generally cleans up memory.
+            delete cmd;
+            
+            if (execl("/bin/bash", "bash", "-c", innerCommand.c_str(),
+                      nullptr) == -1) {
+                perror("smash error: execl failed");
+                _exit(1);
+            }
+        }
+    } else {
+//error
+        perror("smash error: fork failed");
+        
+    }
+}
+
+PipeCommand::PipeCommand(const char* cmdLine) : Command(cmdLine) {
+    std::string line_str(cmdLine);
+    
+    // Find the position of the first pipe character
+    size_t firstPipePos = line_str.find('|');
+    
+    // Determine the pipe type: '|&' or '|'
+    bool is_stderr_pipe = false;
+    if (firstPipePos != std::string::npos &&
+        line_str[firstPipePos + 1] == '&') {
+        isNormalPipe = true;
+    } else {
+        isNormalPipe = false;
+    }
+    // Determine the split position (either '|' or '|&')
+    size_t split_pos = firstPipePos + (is_stderr_pipe ? 2 : 1);
+    
+    // Extract and trim command1 (everything before the pipe symbol(s))
+    this->command1Line = line_str.substr(0, firstPipePos);
+    this->command1Line = _trim(this->command1Line); // Assumes _trim is global
+    
+    // Extract and trim command2 (everything after the pipe symbol(s))
+    this->command2Line = line_str.substr(split_pos);
+    this->command2Line = _trim(this->command2Line); // Assumes _trim is global
+    
+};
+
+void PipeCommand::execute() {
+    int pfd[2];
+    if (pipe(pfd) == -1) {
+        perror("smash error: pipe failed");
+        return;
+    }
+    
+    pid_t pid1 = fork(); // Fork Command 1 (Writer)
+    
+    if (pid1 == 0) {
+        // --- CHILD 1 (Writer: command1) ---
+        close(pfd[0]); // Close read end
+        
+        // Redirect stdout (1) or stderr (2) to the pipe's write end (pfd[1])
+        int fd_to_redirect = isNormalPipe ? 2 : 1;
+        if (dup2(pfd[1], fd_to_redirect) == -1) {
+            perror("smash error: dup2 failed");
+            _exit(1);
+        }
+        close(pfd[1]); // Close write end
+        
+        // Execute command1 (using /bin/bash -c for flexibility)
+        if (execl("/bin/bash", "bash", "-c", command1Line.c_str(), nullptr) == -1) {
+            perror("smash error: execl failed");
+            _exit(1);
+        }
+    }
+    
+    // --- PARENT ---
+    pid_t pid2 = fork(); // Fork Command 2 (Reader)
+    
+    if (pid2 == 0) {
+        // --- CHILD 2 (Reader: command2) ---
+        close(pfd[1]); // Close write end
+        
+        // Redirect stdin (0) to the pipe's read end (pfd[0])
+        if (dup2(pfd[0], 0) == -1) {
+            perror("smash error: dup2 failed");
+            _exit(1);
+        }
+        close(pfd[0]); // Close read end
+        
+        // Execute command2
+        if (execl("/bin/bash", "bash", "-c", command2Line.c_str(), nullptr) == -1) {
+            perror("smash error: execl failed");
+            _exit(1);
+        }
+    }
+    else{
+    
+    // --- PARENT (smash shell) ---
+    // Close the parent's copies of the pipe FDs
+    close(pfd[0]);
+    close(pfd[1]);
+    
+    // Wait for both children to finish
+    waitpid(pid1, nullptr, 0);
+    waitpid(pid2, nullptr, 0);
     }
 }
