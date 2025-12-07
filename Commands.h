@@ -131,17 +131,19 @@ public:
     void execute() override;
 };
 //
-// class DiskUsageCommand : public Command
-//{
-// public:
-//    DiskUsageCommand(const char *cmd_line);
-//
-//    virtual ~DiskUsageCommand()
-//    {
-//    }
-//
-//    void execute() override;
-//};
+#include <limits.h>
+ class DiskUsageCommand : public Command
+{
+     char path[PATH_MAX];
+ public:
+    DiskUsageCommand(const char *cmd_line);
+
+    virtual ~DiskUsageCommand()
+    {
+    }
+
+    void execute() override;
+};
 //
 // class WhoAmICommand : public Command
 //{

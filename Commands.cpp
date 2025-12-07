@@ -164,18 +164,16 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         // For now, assume a found '>' means redirection must be handled
         return new RedirectionCommand(cmd_line);
     }
-
+    
     //PIPE
     size_t pipe_pos = string(cmd_line).find_first_of('|');
     // Check the position directly against std::string::npos
     if (pipe_pos != std::string::npos) {
-        // Redirection character was found!
-        
-        // Optional: Add logic here to ensure it's not inside quotes if required by spec.
-        
-        // For now, assume a found '>' means redirection must be handled
+        cout << "Pipe character was found! " << endl;
         return new PipeCommand(cmd_line);
     }
+    cout << "no Pipe! " << endl;
+
 //    std::cout << "find_first_of " << redirect_pos << std::endl;
     // --- Remainder of Command Identification Logic ---
     // single word commands
@@ -213,6 +211,8 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         return new UnAliasCommand(cmd_line, &aliases);
     } else if (firstWord == "unsetenv") {
         return new UnSetEnvCommand(cmd_line);
+    } else if (firstWord == "du") {
+        return new DiskUsageCommand(cmd_line);
     }
         // not built in command
         // not special command
@@ -809,7 +809,7 @@ void RedirectionCommand::execute() {
 
 PipeCommand::PipeCommand(const char* cmdLine) : Command(cmdLine) {
     std::string line_str(cmdLine);
-    
+    cout << "PIPE!" << endl;
     // Find the position of the first pipe character
     size_t firstPipePos = line_str.find('|');
     
@@ -817,9 +817,9 @@ PipeCommand::PipeCommand(const char* cmdLine) : Command(cmdLine) {
     bool is_stderr_pipe = false;
     if (firstPipePos != std::string::npos &&
         line_str[firstPipePos + 1] == '&') {
-        isNormalPipe = true;
-    } else {
         isNormalPipe = false;
+    } else {
+        isNormalPipe = true;
     }
     // Determine the split position (either '|' or '|&')
     size_t split_pos = firstPipePos + (is_stderr_pipe ? 2 : 1);
@@ -827,11 +827,11 @@ PipeCommand::PipeCommand(const char* cmdLine) : Command(cmdLine) {
     // Extract and trim command1 (everything before the pipe symbol(s))
     this->command1Line = line_str.substr(0, firstPipePos);
     this->command1Line = _trim(this->command1Line); // Assumes _trim is global
-    
+    cout << "c1" << command1Line << endl;
     // Extract and trim command2 (everything after the pipe symbol(s))
     this->command2Line = line_str.substr(split_pos);
     this->command2Line = _trim(this->command2Line); // Assumes _trim is global
-    
+    cout << " into " << command2Line << endl;
 };
 
 void PipeCommand::execute() {
@@ -856,7 +856,8 @@ void PipeCommand::execute() {
         close(pfd[1]); // Close write end
         
         // Execute command1 (using /bin/bash -c for flexibility)
-        if (execl("/bin/bash", "bash", "-c", command1Line.c_str(), nullptr) == -1) {
+        if (execl("/bin/bash", "bash", "-c", command1Line.c_str(), nullptr) ==
+            -1) {
             perror("smash error: execl failed");
             _exit(1);
         }
@@ -877,20 +878,103 @@ void PipeCommand::execute() {
         close(pfd[0]); // Close read end
         
         // Execute command2
-        if (execl("/bin/bash", "bash", "-c", command2Line.c_str(), nullptr) == -1) {
+        if (execl("/bin/bash", "bash", "-c", command2Line.c_str(), nullptr) ==
+            -1) {
             perror("smash error: execl failed");
             _exit(1);
         }
-    }
-    else{
-    
-    // --- PARENT (smash shell) ---
-    // Close the parent's copies of the pipe FDs
-    close(pfd[0]);
-    close(pfd[1]);
-    
-    // Wait for both children to finish
-    waitpid(pid1, nullptr, 0);
-    waitpid(pid2, nullptr, 0);
+    } else {
+        
+        // --- PARENT (smash shell) ---
+        // Close the parent's copies of the pipe FDs
+        close(pfd[0]);
+        close(pfd[1]);
+        
+        // Wait for both children to finish
+        waitpid(pid1, nullptr, 0);
+        waitpid(pid2, nullptr, 0);
     }
 }
+
+DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
+    char* args[COMMAND_MAX_ARGS];
+    int numArgs = _parseCommandLine(cmdLine, args);
+    
+    if (numArgs == 1) {
+        if (getcwd(this->path, PATH_MAX) == nullptr) {
+            throw std::runtime_error("smash error: du: cannot get current directory");
+        }
+    } else if (numArgs == 2) {
+        // Safe copy: ensures content is copied to the class member array
+        strncpy(this->path, args[1], PATH_MAX - 1);
+        this->path[PATH_MAX - 1] = '\0'; // Ensure null termination
+    } else {
+        throw std::runtime_error("smash error: du: too many arguments");
+    }
+    
+    // 💥 CRITICAL: You must free the memory allocated by _parseCommandLine here!
+    for (int i = 0; i < numArgs; ++i) {
+        free(args[i]);
+    }
+}
+
+
+
+#include <sys/stat.h> // for stat() and struct stat
+#include <dirent.h>  // for opendir(), readdir(), closedir()
+
+int getKBDiskUsage(const std::string& path) {
+    struct stat st;
+    
+    // 1. Get file status (size and type)
+    if (stat(path.c_str(), &st) == -1) {
+        // Use cerr for errors, as stdout might be redirected
+        std::cerr << "smash error: stat failed for " << path << std::endl;
+        return 0;
+    }
+    
+    // Initialize total usage with the size of the current file/directory, rounded up to KB
+    // (st.st_blocks * 512) is the accurate disk usage on many systems,
+    // but st.st_size / 1024 is often used for simplicity in shell projects.
+    int total_usage_kb = (st.st_size + 1023) / 1024;
+    
+    // 2. Check if it is a directory
+    if (S_ISDIR(st.st_mode)) {
+        DIR* dir = opendir(path.c_str());
+        if (!dir) {
+            std::cerr << "smash error: opendir failed for " << path << std::endl;
+            return total_usage_kb; // Return size of the directory entry itself
+        }
+        
+        struct dirent* entry;
+        while ((entry = readdir(dir)) != nullptr) {
+            std::string name = entry->d_name;
+            
+            // Skip '.' (current directory) and '..' (parent directory)
+            if (name == "." || name == "..") {
+                continue;
+            }
+            
+            // Construct the full path for the recursive call
+            std::string full_path = path + "/" + name;
+            
+            // Recursively calculate and add usage
+            total_usage_kb += getKBDiskUsage(full_path);
+        }
+        
+        closedir(dir);
+    }
+    
+    // 3. Return the total size (current size + size of all contents)
+    return total_usage_kb;
+};
+
+void DiskUsageCommand::execute() {
+    
+    // 2. Start the recursive calculation
+    int total_kb = getKBDiskUsage(string(path));
+    
+    // 3. Print the result
+    std::cout << total_kb << " KB" << std::endl;
+}
+
