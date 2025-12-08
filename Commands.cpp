@@ -830,8 +830,6 @@ void RedirectionCommand::execute() {
                 .CreateCommand(innerCommand.c_str());
 
 // Check if the command is a BuiltInCommand
-// Note: This assumes you have access to the BuiltInCommand class definition and
-// can use dynamic_cast (which requires RTTI/polymorphism).
         auto* built_in_cmd = dynamic_cast<BuiltInCommand*>(cmd);
         
         if (built_in_cmd) {
