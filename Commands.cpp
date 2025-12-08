@@ -1,15 +1,19 @@
 #include <unistd.h>
+#include <stdlib.h>
 #include <string.h>
 #include <cstring>
 #include <iostream>
 #include <vector>
 #include <sstream>
 #include <sys/wait.h>
+#include <sys/utsname.h>
+#include <sys/sysinfo.h>
 #include <limits.h>
 #include <iomanip>
 #include "Commands.h"
 #include <signal.h>
 #include <utility>
+#include <fstream>
 
 using namespace std;
 
@@ -185,11 +189,9 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     } // done
     else if (firstWord == "jobs") {
         return new JobsCommand(cmd_line, &jobsList);
+    } else if (firstWord == "sysinfo") {
+        return new SysInfoCommand(cmd_line);
     }
-        //    else if (firstWord == "sysinfo")
-        //    {
-        //        return new SysInfoCommand();
-        //    }
         
         // multi-word commands
     else if (firstWord == "chprompt") {
@@ -720,6 +722,63 @@ void UnSetEnvCommand::execute() {
     }
 }
 
+
+void SysInfoCommand::execute(){
+    
+    struct utsname name;
+    
+    if (uname(&name) == 0) {
+        printf("System: %s\n", name.sysname);
+        printf("Hostname: %s\n", name.nodename);
+        printf("Kernel: %s ", name.release);
+        for (int i = 0; i < PATH_MAX; ++i) {
+            if(name.version[i] == ' ' && name.version[i] == '\n' && name.version[i] == '\0')
+            {
+                cout << name.version[i];
+            }
+            else {
+                cout << endl;
+                break;
+            }
+        }
+        printf("Architecture: %s\n", name.machine);
+    } else {
+        // Use perror to print a descriptive error message if uname fails
+        perror("Error calling uname");
+        return ; // Return a non-zero exit code to signal failure
+    }
+        
+        std::ifstream stat_file("/proc/stat");
+        std::string line;
+        long boot_time_sec = 0;
+
+// Search for the "btime" line in /proc/stat
+        while (std::getline(stat_file, line))
+        {
+            if (line.substr(0, 6) == "btime ") {
+                std::stringstream ss(line.substr(6));
+                ss >> boot_time_sec;
+                break;
+            }
+        }
+        
+        if (boot_time_sec == 0)
+        {
+//            return "N/A"; // Error reading file
+            perror("Error reading file");
+        }
+
+// Convert seconds since epoch to a formatted string
+        std::time_t boot_time_t = boot_time_sec;
+        struct tm *tm_info = std::localtime(&boot_time_t);
+        
+        char buffer[20];
+// Format: YYYY-MM-DD HH:MM:SS
+        std::strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
+        
+        std::cout << "Boot Time: " << std::string(buffer) << std::endl;
+}
+
 RedirectionCommand::RedirectionCommand(const char* cmdLine) : Command(cmdLine) {
     string cmdS = string(cmdLine);
     int firstArrowIdx = cmdS.find_first_of('>');
@@ -902,7 +961,8 @@ DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
     
     if (numArgs == 1) {
         if (getcwd(this->path, PATH_MAX) == nullptr) {
-            throw std::runtime_error("smash error: du: cannot get current directory");
+            throw std::runtime_error(
+                    "smash error: du: cannot get current directory");
         }
     } else if (numArgs == 2) {
         // Safe copy: ensures content is copied to the class member array
@@ -917,8 +977,6 @@ DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
         free(args[i]);
     }
 }
-
-
 
 #include <sys/stat.h> // for stat() and struct stat
 #include <dirent.h>  // for opendir(), readdir(), closedir()
@@ -942,7 +1000,8 @@ int getKBDiskUsage(const std::string& path) {
     if (S_ISDIR(st.st_mode)) {
         DIR* dir = opendir(path.c_str());
         if (!dir) {
-            std::cerr << "smash error: opendir failed for " << path << std::endl;
+            std::cerr << "smash error: opendir failed for " << path
+                      << std::endl;
             return total_usage_kb; // Return size of the directory entry itself
         }
         

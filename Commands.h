@@ -461,66 +461,18 @@ public:
     void execute() override;
 };
 //
-// class SysInfoCommand : public BuiltInCommand
-//{
-// public:
-//     SysInfoCommand();
-//
-//     virtual ~SysInfoCommand()
-//     {
-//     }
-//
-//     void execute() override
-//     {
-//         struct utsname name;
-//
-//         // TODO: change to
-//
-//         // open /proc and read from there
-//         if (uname(&name) == 0)
-//         {
-//             std::cout << "System: " << name.sysname << std::endl;
-//             std::cout << "Hostname: " << name.nodename << std::endl;
-//             std::cout << "Kernel: " << name.release << std::endl;
-//             std::cout << "Architecture: " << name.machine << std::endl;
-//         }
-//         else
-//         {
-//             // Handle error: Could not get system information
-//             std::cerr << "smash error: sysinfo: failed to retrieve basic info" << std::endl;
-//         }
-//
-//         std::ifstream stat_file("/proc/stat");
-//         std::string line;
-//         long boot_time_sec = 0;
-//
-//         // Search for the "btime" line in /proc/stat
-//         while (std::getline(stat_file, line))
-//         {
-//             if (line.substr(0, 6) == "btime ")
-//             {
-//                 std::stringstream ss(line.substr(6));
-//                 ss >> boot_time_sec;
-//                 break;
-//             }
-//         }
-//
-//         if (boot_time_sec == 0)
-//         {
-//             return "N/A"; // Error reading file
-//         }
-//
-//         // Convert seconds since epoch to a formatted string
-//         std::time_t boot_time_t = boot_time_sec;
-//         struct tm *tm_info = std::localtime(&boot_time_t);
-//
-//         char buffer[20];
-//         // Format: YYYY-MM-DD HH:MM:SS
-//         std::strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
-//
-//         std::cout << "Boot Time: " << std::string(buffer) << std::endl;
-//     }
-// };
+ class SysInfoCommand : public BuiltInCommand
+{
+ public:
+     SysInfoCommand(const char* cmdLine): BuiltInCommand(cmdLine){};
+
+     virtual ~SysInfoCommand()
+     {
+     }
+
+     void execute() override;
+     
+ };
 
 class SmallShell {
 private:
