@@ -173,10 +173,8 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     size_t pipe_pos = string(cmd_line).find_first_of('|');
     // Check the position directly against std::string::npos
     if (pipe_pos != std::string::npos) {
-        cout << "Pipe character was found! " << endl;
         return new PipeCommand(cmd_line);
     }
-    cout << "no Pipe! " << endl;
 
 //    std::cout << "find_first_of " << redirect_pos << std::endl;
     // --- Remainder of Command Identification Logic ---
@@ -215,6 +213,8 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         return new UnSetEnvCommand(cmd_line);
     } else if (firstWord == "du") {
         return new DiskUsageCommand(cmd_line);
+    } else if (firstWord == "whoami") {
+        return new WhoAmICommand(cmd_line);
     }
         // not built in command
         // not special command
@@ -224,10 +224,8 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         if (string(cmd_line).find("*") == string::npos &&
             string(cmd_line).find("?") == string::npos) {
 
-//            std::cout << "smash: simpleExternal command" << std::endl;
             return new SimpleExternalCommand(cmd_line, isBackground);
         } else {
-//            std::cout << "smash: complexExternal command" << std::endl;
             
             return new ComplexExternalCommand(cmd_line, isBackground);
         }
@@ -236,7 +234,6 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
 }
 
 void GetCurrDirCommand::execute() {
-//    printf("in get curr dir\n");
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) != nullptr) {
         std::cout << cwd << std::endl;
@@ -249,11 +246,8 @@ void SmallShell::executeCommand(const char* cmd_line) {
     // TODO: Add your implementation here
     // for example:
 
-//    std::cout << "smash: cmd_line " << cmd_line << std::endl;
     Command* cmd = CreateCommand(cmd_line);
-//    std::cout << "smash: executing command: " << cmd_line << std::endl;
     cmd->execute();
-    // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
 
 SetPromptCommand::SetPromptCommand(const char* cmdLine) : BuiltInCommand(
@@ -277,8 +271,6 @@ ChangeDirCommand::ChangeDirCommand(const char* cmdLine,
                                    const char* previousUsed) : BuiltInCommand(
         cmdLine) {
     
-    // char* newTargetPath;
-    // char* previousUsedPath;
     newTargetPath = new char[PATH_MAX];
     previousUsedPath = new char[PATH_MAX];
     
@@ -316,8 +308,6 @@ ChangeDirCommand::ChangeDirCommand(const char* cmdLine,
 
 void ChangeDirCommand::execute() {
 
-//    std::cout << "newTargetPath:" << newTargetPath << strlen(newTargetPath)
-//              << std::endl;
     for (size_t i = 0; i < strlen(newTargetPath); i++) {
         if (newTargetPath[i] == '\n') {
             newTargetPath[i] = '\0';
@@ -369,7 +359,7 @@ ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList* jobsList)
 }
 
 void ForegroundCommand::execute() {
-// 1. Find the job safely
+// Find job
     auto it = jobsList->jobs.find(targetJobId);
     
     if (it == jobsList->jobs.end()) {
@@ -382,14 +372,10 @@ void ForegroundCommand::execute() {
     auto& targetJob = it->second;
     
     // Check if the job is running or stopped (it shouldn't be 'finished' here)
-    // You should probably check for a valid, non-negative PID.
-    
     std::cout << (targetJob.cmd->getCmdLine()) << " " << targetJob.pid
               << std::endl;
     
     // Wait for the foreground process to finish
-    // Note: If you want to handle signals/errors, you should use
-    // WUNTRACED or other options and check the return value.
     // TODO: consider tcsetpgrp
     waitpid(targetJob.pid, nullptr, 0);
     
@@ -442,14 +428,20 @@ void ComplexExternalCommand::execute() {
         int pid = fork();
         if (pid == 0) {
             //child
+            // change group ID:
+            setpgrp();
+            signal(SIGINT, SIG_DFL);
+            
             char* const argv[] = {"/bin/bash", "-c",
                                   const_cast<char*>(getCmdLine()), NULL};
             execv(argv[0], argv);
             perror("smash error: excecution failed");
         } else if (pid > 0) {
             //parent
+            auto& smash = SmallShell::getInstance();
+            smash.setFgPid(pid);
             waitpid(pid, nullptr, 0);
-//            std::cout << "finished waiting" << std::endl;
+            smash.setFgPid(-1);
         } else {
             perror("smash error: fork failed");
         }
@@ -485,6 +477,9 @@ void SimpleExternalCommand::execute() {
         int pid = fork();
         if (pid == 0) {
             //child
+            setpgrp();
+            signal(SIGINT, SIG_DFL);
+            
             char* args[COMMAND_MAX_ARGS];
             _parseCommandLine(getCmdLine(), args);
             // printAllArgs(args);
@@ -493,7 +488,10 @@ void SimpleExternalCommand::execute() {
             perror("smash error: excecution failed");
         } else if (pid > 0) {
             //parent
+            auto& smash = SmallShell::getInstance();
+            smash.setFgPid(pid);
             waitpid(pid, nullptr, 0);
+            smash.setFgPid(-1);
 //            std::cout << "finished waiting" << std::endl;
         } else {
             perror("smash error: fork failed");
@@ -722,8 +720,7 @@ void UnSetEnvCommand::execute() {
     }
 }
 
-
-void SysInfoCommand::execute(){
+void SysInfoCommand::execute() {
     
     struct utsname name;
     
@@ -732,11 +729,10 @@ void SysInfoCommand::execute(){
         printf("Hostname: %s\n", name.nodename);
         printf("Kernel: %s ", name.release);
         for (int i = 0; i < PATH_MAX; ++i) {
-            if(name.version[i] == ' ' && name.version[i] == '\n' && name.version[i] == '\0')
-            {
+            if (name.version[i] == ' ' && name.version[i] == '\n' &&
+                name.version[i] == '\0') {
                 cout << name.version[i];
-            }
-            else {
+            } else {
                 cout << endl;
                 break;
             }
@@ -745,38 +741,36 @@ void SysInfoCommand::execute(){
     } else {
         // Use perror to print a descriptive error message if uname fails
         perror("Error calling uname");
-        return ; // Return a non-zero exit code to signal failure
+        return; // Return a non-zero exit code to signal failure
     }
-        
-        std::ifstream stat_file("/proc/stat");
-        std::string line;
-        long boot_time_sec = 0;
+    
+    std::ifstream stat_file("/proc/stat");
+    std::string line;
+    long boot_time_sec = 0;
 
 // Search for the "btime" line in /proc/stat
-        while (std::getline(stat_file, line))
-        {
-            if (line.substr(0, 6) == "btime ") {
-                std::stringstream ss(line.substr(6));
-                ss >> boot_time_sec;
-                break;
-            }
+    while (std::getline(stat_file, line)) {
+        if (line.substr(0, 6) == "btime ") {
+            std::stringstream ss(line.substr(6));
+            ss >> boot_time_sec;
+            break;
         }
-        
-        if (boot_time_sec == 0)
-        {
+    }
+    
+    if (boot_time_sec == 0) {
 //            return "N/A"; // Error reading file
-            perror("Error reading file");
-        }
+        perror("Error reading file");
+    }
 
 // Convert seconds since epoch to a formatted string
-        std::time_t boot_time_t = boot_time_sec;
-        struct tm *tm_info = std::localtime(&boot_time_t);
-        
-        char buffer[20];
+    std::time_t boot_time_t = boot_time_sec;
+    struct tm* tm_info = std::localtime(&boot_time_t);
+    
+    char buffer[20];
 // Format: YYYY-MM-DD HH:MM:SS
-        std::strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
-        
-        std::cout << "Boot Time: " << std::string(buffer) << std::endl;
+    std::strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
+    
+    std::cout << "Boot Time: " << std::string(buffer) << std::endl;
 }
 
 RedirectionCommand::RedirectionCommand(const char* cmdLine) : Command(cmdLine) {
@@ -860,13 +854,12 @@ void RedirectionCommand::execute() {
     } else {
 //error
         perror("smash error: fork failed");
-        
     }
 }
 
 PipeCommand::PipeCommand(const char* cmdLine) : Command(cmdLine) {
     std::string line_str(cmdLine);
-    cout << "PIPE!" << endl;
+    
     // Find the position of the first pipe character
     size_t firstPipePos = line_str.find('|');
     
@@ -879,14 +872,14 @@ PipeCommand::PipeCommand(const char* cmdLine) : Command(cmdLine) {
         isNormalPipe = true;
     }
     // Determine the split position (either '|' or '|&')
-    size_t split_pos = firstPipePos + (is_stderr_pipe ? 2 : 1);
+    size_t splitPos = firstPipePos + (is_stderr_pipe ? 2 : 1);
     
     // Extract and trim command1 (everything before the pipe symbol(s))
     this->command1Line = line_str.substr(0, firstPipePos);
     this->command1Line = _trim(this->command1Line); // Assumes _trim is global
     cout << "c1" << command1Line << endl;
     // Extract and trim command2 (everything after the pipe symbol(s))
-    this->command2Line = line_str.substr(split_pos);
+    this->command2Line = line_str.substr(splitPos);
     this->command2Line = _trim(this->command2Line); // Assumes _trim is global
     cout << " into " << command2Line << endl;
 };
@@ -910,9 +903,10 @@ void PipeCommand::execute() {
             perror("smash error: dup2 failed");
             _exit(1);
         }
-        close(pfd[1]); // Close write end
+        close(pfd[1]); // Close write end //MAYBE WRONG
         
         // Execute command1 (using /bin/bash -c for flexibility)
+        // TODO: BuiltIn Command
         if (execl("/bin/bash", "bash", "-c", command1Line.c_str(), nullptr) ==
             -1) {
             perror("smash error: execl failed");
@@ -1032,6 +1026,25 @@ void DiskUsageCommand::execute() {
     int total_kb = getKBDiskUsage(string(path));
     
     // 3. Print the result
-    std::cout << total_kb << " KB" << std::endl;
+    std::cout << "Total disk usage: " << total_kb << " KB" << std::endl;
 }
 
+#include <sys/types.h>
+#include <pwd.h>
+
+WhoAmICommand::WhoAmICommand(const char* cmdLine) : Command(cmdLine) {
+// 1. Get the real user ID and group ID
+    userId = geteuid();
+    struct passwd* data = getpwuid(userId);
+    if (data == nullptr) {
+        perror("Smash getpwuid failed");
+    }
+    username = data->pw_name;
+    groupId = data->pw_uid;
+    homeDir = data->pw_dir;
+}
+
+void WhoAmICommand::execute() {
+    printf("%lld\n%lld\n%s %s\n", userId, groupId,
+           username, homeDir);
+}

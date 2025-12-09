@@ -111,51 +111,52 @@ public:
     virtual ~RedirectionCommand() {
     }
     
-    void execute() override ;
+    void execute() override;
     
 };
+
 //
- class PipeCommand : public Command
-{
+class PipeCommand : public Command {
     // TODO: Add your data members
     string command1Line;
     string command2Line;
     bool isNormalPipe;
- public:
-    PipeCommand(const char *cmd_line);
-
-    virtual ~PipeCommand()
-    {
+public:
+    PipeCommand(const char* cmd_line);
+    
+    virtual ~PipeCommand() {
     }
-
+    
     void execute() override;
 };
 //
 #include <limits.h>
- class DiskUsageCommand : public Command
-{
-     char path[PATH_MAX];
- public:
-    DiskUsageCommand(const char *cmd_line);
 
-    virtual ~DiskUsageCommand()
-    {
+class DiskUsageCommand : public Command {
+    char path[PATH_MAX];
+public:
+    DiskUsageCommand(const char* cmd_line);
+    
+    virtual ~DiskUsageCommand() {
     }
-
+    
     void execute() override;
 };
-//
-// class WhoAmICommand : public Command
-//{
-// public:
-//    WhoAmICommand(const char *cmd_line);
-//
-//    virtual ~WhoAmICommand()
-//    {
-//    }
-//
-//    void execute() override;
-//};
+
+class WhoAmICommand : public Command {
+    char* username;
+    uid_t userId;
+    gid_t groupId;
+    char* homeDir;
+public:
+    WhoAmICommand(const char* cmd_line);
+    
+    virtual ~WhoAmICommand() {
+    }
+    
+    void execute() override;
+};
+
 //
 // class USBInfoCommand : public Command
 //{
@@ -460,29 +461,28 @@ public:
     
     void execute() override;
 };
+
 //
- class SysInfoCommand : public BuiltInCommand
-{
- public:
-     SysInfoCommand(const char* cmdLine): BuiltInCommand(cmdLine){};
-
-     virtual ~SysInfoCommand()
-     {
-     }
-
-     void execute() override;
-     
- };
+class SysInfoCommand : public BuiltInCommand {
+public:
+    SysInfoCommand(const char* cmdLine) : BuiltInCommand(cmdLine) {};
+    
+    virtual ~SysInfoCommand() {
+    }
+    
+    void execute() override;
+    
+};
 
 class SmallShell {
 private:
     // TODO: Add your data members
-    
     char* previousUsedPath = "\n";
-    
     string prompt = "smash";
     JobsList jobsList;
     map<string, string> aliases;
+    
+    pid_t fgPid = -1;
     
     SmallShell();
 
@@ -522,6 +522,9 @@ public:
         return jobsList;
     }
     
+    pid_t getFgPid() { return fgPid; };
+    
+    pid_t setFgPid(pid_t newPid) { fgPid = newPid; };
     // TODO: add extra methods as needed
 };
 
