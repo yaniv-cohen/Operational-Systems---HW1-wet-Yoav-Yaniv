@@ -11,6 +11,7 @@
 #include <limits.h>
 #include <iomanip>
 #include "Commands.h"
+#include "signals.h"
 #include <signal.h>
 #include <utility>
 #include <fstream>
@@ -196,7 +197,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         return new SetPromptCommand(cmd_line);
     } // done
     else if (firstWord == "cd") {
-        return new ChangeDirCommand(cmd_line, this->previousUsedPath);
+        return new ChangeDirCommand(cmd_line);
     } // done
     
     else if (firstWord == "fg") {
@@ -223,7 +224,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
 //        std::cout << "not matched any built in command\n" << std::endl;
         if (string(cmd_line).find("*") == string::npos &&
             string(cmd_line).find("?") == string::npos) {
-
+            
             return new SimpleExternalCommand(cmd_line, isBackground);
         } else {
             
@@ -245,7 +246,7 @@ void GetCurrDirCommand::execute() {
 void SmallShell::executeCommand(const char* cmd_line) {
     // TODO: Add your implementation here
     // for example:
-
+    
     Command* cmd = CreateCommand(cmd_line);
     cmd->execute();
 }
@@ -267,64 +268,44 @@ void SetPromptCommand::execute() {
     smash.setPrompt(getCmdLine());
 }
 
-ChangeDirCommand::ChangeDirCommand(const char* cmdLine,
-                                   const char* previousUsed) : BuiltInCommand(
+ChangeDirCommand::ChangeDirCommand(const char* cmdLine) : BuiltInCommand(
         cmdLine) {
     
-    newTargetPath = new char[PATH_MAX];
-    previousUsedPath = new char[PATH_MAX];
-    
     char* args[COMMAND_MAX_ARGS];
-    std::cout << "|" << cmdLine << std::endl;
     int i = _parseCommandLine(cmdLine, args);
     
-    // printAllArgs(args);
+    auto& smash = SmallShell::getInstance();
     if (i < 2) {
-        std::cout << "no arguments to cd\n";
-        getcwd(newTargetPath, PATH_MAX);
-        if (previousUsed != nullptr) {
-            
-            strcpy(previousUsedPath, previousUsed);
-        } else {
-            std::cout << "no arguments to cd4\n";
-            
-            previousUsedPath = nullptr;
-        }
+        perror("no arguments to cd\n");
     }
     if (i > 2) {
-        throw runtime_error("smash error: cd: too many arguments");
+        perror("smash error: cd: too many arguments");
     } else if (i == 2) {
-        if (strcmp("-", args[1]) == 0 && previousUsed == nullptr) {
-            throw runtime_error("smash error: cd: OLDPWD not set");
-        } else if (strcmp("-", args[1]) == 0) { // set prev to current
-            getcwd(previousUsedPath, PATH_MAX);
-            strcpy(newTargetPath, previousUsed);
+        
+        if (strcmp("-", args[1]) == 0 &&
+            smash.getPreviousUsedPath() == "\n") {
+            perror("smash error: cd: OLDPWD not set");
+        }else if (strcmp("-", args[1]) == 0) { // set prev to current
+//            cout<< "move to prev:" <<smash.getPreviousUsedPath()<<endl;
+            newTargetPath= smash.getPreviousUsedPath();
         } else {
-            getcwd(previousUsedPath, PATH_MAX);
-            strcpy(newTargetPath, args[1]);
+            newTargetPath = args[1];
         }
+        
+        char p[PATH_MAX];
+        getcwd(p, PATH_MAX);
+//        cout <<"set prev to : "<<p<<endl;
+        smash.setPreviousUsedPathChar(p);
     }
 }
 
 void ChangeDirCommand::execute() {
-
-    for (size_t i = 0; i < strlen(newTargetPath); i++) {
-        if (newTargetPath[i] == '\n') {
-            newTargetPath[i] = '\0';
-            break;
-        }
-    }
     
-    if (chdir(newTargetPath) == 0) {
-        std::cout << "smash: about to change directory to " << newTargetPath
-                  << std::endl;
+    if (chdir(newTargetPath.c_str()) == 0) {
         SmallShell& smash = SmallShell::getInstance();
-        std::cout << "smash: previous used path is " << previousUsedPath
-                  << std::endl;
-        smash.setPreviousUsedPath(previousUsedPath);
     } else {
         // TODO: catch this exception with "smash error: cd: invalid path"
-        throw runtime_error("smash error: cd: invalid path");
+        perror("smash error: cd: invalid path");
     }
 }
 
@@ -375,9 +356,16 @@ void ForegroundCommand::execute() {
     std::cout << (targetJob.cmd->getCmdLine()) << " " << targetJob.pid
               << std::endl;
     
+    
+    //set group leader for Ctr+C
+    auto& smash = SmallShell::getInstance();
+    smash.setFgPid(targetJob.pid);
+    if (signal(SIGINT, ctrlCHandler) == SIG_ERR) {
+        perror("smash error: failed to set ctrl-C handler");
+    }
     // Wait for the foreground process to finish
-    // TODO: consider tcsetpgrp
     waitpid(targetJob.pid, nullptr, 0);
+    smash.setFgPid(-1);
     
     // Remove the job from the list after it finishes
     // jobsList->removeJobById(targetJob.jobId);
@@ -396,21 +384,24 @@ QuitCommand::QuitCommand(const char* cmd_line, JobsList* jobsList) :
     if (strcmp(args[1], "kill") == 0) {
         jl = jobsList;
         jobsList->removeFinishedJobs();
-        cout << "sending SIGKILL signal to " << jobsList->jobs.size()
-             << " jobs: "
-             << endl;
+        cout << "smash: sending SIGKILL signal to " << jobsList->jobs.size()
+             << " jobs:";
     }
 }
 
 void QuitCommand::execute() {
     
-    cout << "quit execute" << endl;
     if (doNothing) {
-        cout << "do nothing detected" << endl;
+        //        cout << "do nothing detected" << endl;
         return;
     }
+    bool first = true;
     for (auto it = jl->jobs.begin();
          it != jl->jobs.end(); it++) {
+        if (first) {
+            first = false;
+            cout << endl;
+        }
         cout << it->second.pid << ": " << it->second.cmd->getCmdLine() << endl;
         if (kill(it->second.pid, 9) == -1) {
             // Handle error, though often ignored for SIGKILL on exit
@@ -421,8 +412,8 @@ void QuitCommand::execute() {
 }
 
 void ComplexExternalCommand::execute() {
-    std::cout << "Executing complex external command: " << getCmdLine()
-              << std::endl;
+//    std::cout << "Executing complex external command: " << getCmdLine()
+//              << std::endl;
     if (!isBG) {
         //foreground
         int pid = fork();
@@ -458,9 +449,9 @@ void ComplexExternalCommand::execute() {
         } else if (pid > 0) {
             //parent
             // waitpid(pid, nullptr, 0);
-            std::cout << "not waiting" << std::endl;
+//            std::cout << "not waiting" << std::endl;
             SmallShell::getInstance().getJobsList().addJob(this, pid, false);
-            std::cout << "added to joblist" << std::endl;
+//            std::cout << "added to joblist" << std::endl;
             SmallShell::getInstance().getJobsList().printJobsList();
             return;
         } else {
@@ -470,8 +461,8 @@ void ComplexExternalCommand::execute() {
 }
 
 void SimpleExternalCommand::execute() {
-    std::cout << "Executing SimpleExternalCommand: " << getCmdLine()
-              << std::endl;
+//    std::cout << "Executing SimpleExternalCommand: " << getCmdLine()
+//              << std::endl;
     if (!isBG) {
         //foreground
         int pid = fork();
@@ -510,9 +501,9 @@ void SimpleExternalCommand::execute() {
         } else if (pid > 0) {
             //parent
             // waitpid(pid, nullptr, 0);
-            std::cout << "not waiting" << std::endl;
+//            std::cout << "not waiting" << std::endl;
             SmallShell::getInstance().getJobsList().addJob(this, pid, false);
-            std::cout << "added to joblist" << std::endl;
+//            std::cout << "added to joblist" << std::endl;
             // SmallShell::getInstance().getJobsList().printJobsList();
         } else {
             perror("smash error: fork failed");
@@ -990,6 +981,7 @@ int getKBDiskUsage(const std::string& path) {
     
     // 2. Check if it is a directory
     if (S_ISDIR(st.st_mode)) {
+        //TODO: cant use open dir!
         DIR* dir = opendir(path.c_str());
         if (!dir) {
             std::cerr << "smash error: opendir failed for " << path
@@ -998,6 +990,7 @@ int getKBDiskUsage(const std::string& path) {
         }
         
         struct dirent* entry;
+        //cant use readdir
         while ((entry = readdir(dir)) != nullptr) {
             std::string name = entry->d_name;
             
@@ -1012,7 +1005,7 @@ int getKBDiskUsage(const std::string& path) {
             // Recursively calculate and add usage
             total_usage_kb += getKBDiskUsage(full_path);
         }
-        
+        //TODO: cnat use closedir
         closedir(dir);
     }
     

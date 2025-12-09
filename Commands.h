@@ -182,15 +182,12 @@ public:
 
 class ChangeDirCommand : public BuiltInCommand {
     // TODO: Add your data members public:
-    char* newTargetPath;
-    char* previousUsedPath;
+    string newTargetPath;
 
 public:
-    ChangeDirCommand(const char* cmdLine, const char* previousUsed);
+    ChangeDirCommand(const char* cmdLine);
     
     virtual ~ChangeDirCommand() {
-        delete[] newTargetPath;
-        delete[] previousUsedPath;
     };
     
     void execute() override;
@@ -477,7 +474,7 @@ public:
 class SmallShell {
 private:
     // TODO: Add your data members
-    char* previousUsedPath = "\n";
+    string previousUsedPath= "\n";
     string prompt = "smash";
     JobsList jobsList;
     map<string, string> aliases;
@@ -510,11 +507,13 @@ public:
         return prompt;
     }
     
-    void setPreviousUsedPath(char* previousUsed) {
+    void setPreviousUsedPathString(string previousUsed) {
         previousUsedPath = previousUsed;
     }
-    
-    char* getPreviousUsedPath() {
+    void setPreviousUsedPathChar( const char* arr) {
+        previousUsedPath=arr;
+    }
+    string getPreviousUsedPath() {
         return previousUsedPath;
     }
     
