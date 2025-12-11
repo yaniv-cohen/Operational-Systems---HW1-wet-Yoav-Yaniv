@@ -252,26 +252,7 @@ public:
     
     void removeJobById(const int jobId);
     
-    void addJob(Command* cmd, int pid, bool isFinished = false) {
-        int newJobId = -1;
-        auto it = jobs.begin();
-        for (int i = 1; i <= 100; i++, it++) {
-            if (it == jobs.end() || i != it->first) {
-                newJobId = i;
-                break;
-            }
-        } // find first open jobId. maximum of 100 jobs (page 2 under assumptions)
-        if (newJobId == -1) {
-            throw runtime_error(
-                    "Jobs full"); // ask what error to put for full jobs list
-        }
-//        jobs[newJobId] =  JobEntry(newJobId, cmd, isFinished, pid);
-        jobs.insert(
-                make_pair(newJobId,
-                          JobsList::JobEntry(newJobId, cmd, isFinished, pid)
-                )
-        );
-    };
+    void addJob(Command* cmd, int pid, bool isFinished ) ;
     
     void printJobsList() {
         for (const auto& entry : jobs) {

@@ -556,6 +556,21 @@ void JobsList::removeJobById(const int jobId) {
     }
 };
 
+void JobsList::addJob(Command* cmd, int pid, bool isFinished=false){
+        removeFinishedJobs();
+        
+        // calculate the new Job ID
+        int newJobId;
+        if (jobs.empty()) {
+            newJobId = 1;
+        } else {
+            // jobs.rbegin() gives an iterator to the last element (highest ID)
+            newJobId = jobs.rbegin()->first + 1;
+        }
+        
+        //Insert the new job
+        jobs.insert(pair<int, JobEntry>(newJobId, JobEntry(newJobId, cmd, isFinished, pid)));
+}
 KillCommand::KillCommand(const char* cmdLine,
                          JobsList* jobsList) : BuiltInCommand(cmdLine),
                                                jobsList(jobsList) {
