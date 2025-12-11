@@ -17,13 +17,16 @@ using namespace std;
 
 class Command {
     char cmd_line[COMMAND_MAX_LENGTH];
-
+    char *args[COMMAND_MAX_ARGS];
+    int numArgs;
 public:
-    Command(const char* cmd_line) {
-        strcpy(this->cmd_line, cmd_line);
-    };
+    Command(const char* cmd_line);
     
-    virtual ~Command() = default;
+    virtual ~Command() {
+        for (int i = 0; i < numArgs; i++) {
+                free(args[i]);
+        }
+    };
     
     virtual void execute() = 0;
     
@@ -175,11 +178,13 @@ public:
 class ChangeDirCommand : public BuiltInCommand {
     // TODO: Add your data members public:
     string newTargetPath;
-
+    char **args;
 public:
     ChangeDirCommand(const char* cmdLine);
     
     virtual ~ChangeDirCommand() {
+        if (args) {
+            free(args);
     };
     
     void execute() override;
@@ -211,54 +216,54 @@ public:
     SetPromptCommand(const char* cmdLine);
     
     void execute() override;
+    
+
 }; // done
 
-class JobsList;
-
-// class QuitCommand : public BuiltInCommand
-//{
-//     // TODO: Add your data members public:
-//     QuitCommand(string &restOfWord, JobsList *jobs);
-//
-//     virtual ~QuitCommand()
-//     {
-//     }
-//
-//     void execute() override;
-// };
 
 class JobsList {
 public:
     class JobEntry {
         // TODO: Add your data members
     public:
+        Command* cmd = nullptr;
         int jobId = 1;
         bool isFinished = false;
         int pid = 0;
-        Command* cmd = nullptr;
         
         JobEntry() = default;
         
-        JobEntry(int jobId, Command* cmd, bool isFinished, int pid) : jobId(
-                jobId),
-                                                                      cmd(cmd),
-                                                                      isFinished(
-                                                                              isFinished),
-                                                                      pid(pid) {};
+        JobEntry(int jobId, Command* cmd, bool isFinished, int pid)
+                : jobId(jobId), cmd(cmd), isFinished(isFinished), pid(pid) {
+        }
+        
+        JobEntry(JobEntry&&) = default;
+        JobEntry& operator=(JobEntry&&) = default;
+        
+        JobEntry(const JobEntry&) = delete;
+        JobEntry& operator=(const JobEntry&) = delete;
+        
+        
+        ~JobEntry() {};
     };
-    
-    // TODO: Add your data members
+
+// TODO: Add your data members
     map<int, JobEntry> jobs;
 
 public:
     JobsList() = default;
+    JobsList(const JobsList&) = delete;
+    JobsList& operator=(const JobsList&) = delete;
     
-    ~JobsList() {
-        for (auto& [id, job]: jobs) {
-            delete job.cmd;
+    ~
+    
+    JobsList() {
+        for (auto& pair: jobs) {
+            delete pair.second.cmd;
         }
-    };
-    void removeJobById(const int jobId) ;
+    }
+    
+    void removeJobById(const int jobId);
     
     void addJob(Command* cmd, int pid, bool isFinished = false) {
         int newJobId = -1;
@@ -273,7 +278,12 @@ public:
             throw runtime_error(
                     "Jobs full"); // ask what error to put for full jobs list
         }
-        jobs[newJobId] = JobEntry(newJobId, cmd, isFinished, pid);
+//        jobs[newJobId] =  JobEntry(newJobId, cmd, isFinished, pid);
+        jobs.insert(
+                make_pair(newJobId,
+                          JobsList::JobEntry(newJobId, cmd, isFinished, pid)
+                )
+        );
     };
     
     void printJobsList() {
@@ -283,16 +293,16 @@ public:
                       << std::endl;
         }
     };
-    
-    // void killAllJobs(){};
+
+// void killAllJobs(){};
     
     void removeFinishedJobs();
     
-    JobEntry* getJobById(int jobId) {
+    JobsList::JobEntry* getJobById(int jobId) {
         return &jobs.at(jobId);
     };
     
-    JobEntry* getLastJob() {
+    JobsList::JobEntry* getLastJob() {
         return &prev(jobs.end())->second;
     };
 };
@@ -461,7 +471,7 @@ public:
 class SmallShell {
 private:
     // TODO: Add your data members
-    string previousUsedPath= "\n";
+    string previousUsedPath = "\n";
     string prompt = "smash";
     JobsList jobsList;
     map<string, string> aliases;

@@ -234,6 +234,11 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     return nullptr;
 }
 
+Command::Command(const char* cmd_line) {
+    strcpy(this->cmd_line, cmd_line);
+    numArgs = _parseCommandLine(cmd_line, args);
+};
+
 void GetCurrDirCommand::execute() {
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) != nullptr) {
@@ -245,14 +250,10 @@ void GetCurrDirCommand::execute() {
 
 void SmallShell::executeCommand(const char* cmd_line) {
     // TODO: Add your implementation here
-    // for example:
-    
     Command* cmd = CreateCommand(cmd_line);
     cmd->execute();
     
-    if (!dynamic_cast<ExternalCommand*>(cmd)) {
-        delete cmd;
-    }
+//        delete cmd;
 }
 
 SetPromptCommand::SetPromptCommand(const char* cmdLine) : BuiltInCommand(
@@ -265,9 +266,6 @@ SetPromptCommand::SetPromptCommand(const char* cmdLine) : BuiltInCommand(
     } else { // ignore arguments aside from first
         setCmdLine(args[1]);
     }
-    for (int i = 0; i < numArgs; ++i) {
-        free(args[i]);
-    }
 }
 
 void SetPromptCommand::execute() {
@@ -278,7 +276,6 @@ void SetPromptCommand::execute() {
 ChangeDirCommand::ChangeDirCommand(const char* cmdLine) : BuiltInCommand(
         cmdLine) {
     
-    char* args[COMMAND_MAX_ARGS];
     int numArgs = _parseCommandLine(cmdLine, args);
     
     auto& smash = SmallShell::getInstance();
