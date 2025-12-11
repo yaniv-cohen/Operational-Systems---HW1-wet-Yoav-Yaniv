@@ -249,17 +249,24 @@ void SmallShell::executeCommand(const char* cmd_line) {
     
     Command* cmd = CreateCommand(cmd_line);
     cmd->execute();
+    
+    if (!dynamic_cast<ExternalCommand*>(cmd)) {
+        delete cmd;
+    }
 }
 
 SetPromptCommand::SetPromptCommand(const char* cmdLine) : BuiltInCommand(
         cmdLine) {
     char* args[COMMAND_MAX_ARGS];
-    int i = _parseCommandLine(cmdLine, args);
-    if (i == 1) { // no arguments (just command)
+    int numArgs = _parseCommandLine(cmdLine, args);
+    if (numArgs == 1) { // no arguments (just command)
         char name[] = "smash";
         setCmdLine(name);
     } else { // ignore arguments aside from first
         setCmdLine(args[1]);
+    }
+    for (int i = 0; i < numArgs; ++i) {
+        free(args[i]);
     }
 }
 
@@ -368,7 +375,7 @@ void ForegroundCommand::execute() {
     smash.setFgPid(-1);
     
     // Remove the job from the list after it finishes
-    // jobsList->removeJobById(targetJob.jobId);
+    jobsList->removeJobById(targetJob.jobId);
 }
 
 QuitCommand::QuitCommand(const char* cmd_line, JobsList* jobsList) :
@@ -493,7 +500,7 @@ void SimpleExternalCommand::execute() {
         if (pid == 0) {
             //child
             char* args[COMMAND_MAX_ARGS];
-            _parseCommandLine(getCmdLine(), args);
+            int numArgs = _parseCommandLine(getCmdLine(), args);
             // printAllArgs(args);
             // char* const argv[] = {args , NULL};
             execvp(args[0], args);
@@ -512,8 +519,22 @@ void SimpleExternalCommand::execute() {
 }
 
 void JobsList::removeFinishedJobs() {
-    for (auto it = jobs.begin(); it != jobs.end();) {
-        if (waitpid(it->second.pid, nullptr, WNOHANG) != 0) {
+// We must use a safe iteration pattern that allows element removal.
+    for (auto it = jobs.begin(); it != jobs.end(); ) {
+        int status;
+        
+        // Use WNOHANG (Non-blocking) to check if the child has terminated
+        pid_t result = waitpid(it->second.pid, &status, WNOHANG);
+        
+        if (result == it->second.pid) {
+            delete it->second.cmd;
+            it = jobs.erase(it);
+        } else if (result == 0 || (result == -1 && errno == EINTR)) {
+            ++it;
+        } else if (result == -1 && errno == ECHILD) {
+            // Process has been reaped by another function (unlikely but robust)
+            // Clean up the map entry if the process is gone.
+            delete it->second.cmd;
             it = jobs.erase(it);
         } else {
             ++it;
@@ -522,8 +543,11 @@ void JobsList::removeFinishedJobs() {
 };
 
 void JobsList::removeJobById(const int jobId) {
-    auto it = jobs.find(jobId);
-    jobs.erase(it);
+        auto it = jobs.find(jobId);
+        if (it != jobs.end()) {
+            delete it->second.cmd;
+            jobs.erase(it);
+        }
 };
 
 KillCommand::KillCommand(const char* cmdLine,
@@ -531,10 +555,10 @@ KillCommand::KillCommand(const char* cmdLine,
                                                jobsList(jobsList) {
     
     char* args[COMMAND_MAX_ARGS];
-    int num_args = _parseCommandLine(cmdLine, args);
+    int numArgs = _parseCommandLine(cmdLine, args);
     
     // 1. Argument Count Check
-    if (num_args != 3) {
+    if (numArgs != 3) {
         // The kill command requires exactly 3 tokens: "kill", "-<signum>", and "<job-id>"
         throw runtime_error("smash error: kill: invalid arguments");
     }
@@ -955,7 +979,6 @@ DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
         throw std::runtime_error("smash error: du: too many arguments");
     }
     
-    // 💥 CRITICAL: You must free the memory allocated by _parseCommandLine here!
     for (int i = 0; i < numArgs; ++i) {
         free(args[i]);
     }
@@ -1032,9 +1055,9 @@ WhoAmICommand::WhoAmICommand(const char* cmdLine) : Command(cmdLine) {
     if (data == nullptr) {
         perror("Smash getpwuid failed");
     }
-    username = data->pw_name;
+    strcpy(username, data->pw_name);
     groupId = data->pw_uid;
-    homeDir = data->pw_dir;
+    strcpy(homeDir, data->pw_dir);
 }
 
 void WhoAmICommand::execute() {

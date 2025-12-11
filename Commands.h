@@ -16,8 +16,7 @@
 using namespace std;
 
 class Command {
-    // TODO: Add your data members
-    char* cmd_line;
+    char cmd_line[COMMAND_MAX_LENGTH];
 
 public:
     Command(const char* cmd_line) {
@@ -39,7 +38,7 @@ public:
     }
     
     void setCmdLine(char* newLine) {
-        cmd_line = newLine;
+        strcpy(this->cmd_line, newLine);
     }
 };
 
@@ -61,8 +60,6 @@ public:
     
     ExternalCommand(const char* cmd_line, bool isBG) : Command(cmd_line),
                                                        isBG(isBG) {
-//        std::cout << "in ExternalCommand constructor\n"
-//                  << std::endl;
     };
     
     virtual ~ExternalCommand() = default;
@@ -73,8 +70,6 @@ class SimpleExternalCommand : public ExternalCommand {
 public:
     SimpleExternalCommand(const char* cmd_line, bool isBG) : ExternalCommand(
             cmd_line, isBG) {
-//        std::cout << "in SimpleExternalCommand constructor\n"
-//                  << std::endl;
     };
     
     virtual ~SimpleExternalCommand() = default;
@@ -144,15 +139,15 @@ public:
 };
 
 class WhoAmICommand : public Command {
-    char* username;
+    char username[PATH_MAX];
     uid_t userId;
     gid_t groupId;
-    char* homeDir;
+    char homeDir[PATH_MAX];
 public:
     WhoAmICommand(const char* cmd_line);
     
     virtual ~WhoAmICommand() {
-    }
+    };
     
     void execute() override;
 };
@@ -266,6 +261,7 @@ public:
             delete job.cmd;
         }
     };
+    void removeJobById(const int jobId) ;
     
     void addJob(Command* cmd, int pid, bool isFinished = false) {
         int newJobId = -1;
@@ -295,8 +291,6 @@ public:
     
     void removeFinishedJobs();
     
-    void removeJobById(const int jobId);
-    
     JobEntry* getJobById(int jobId) {
         return &jobs.at(jobId);
     };
@@ -304,10 +298,6 @@ public:
     JobEntry* getLastJob() {
         return &prev(jobs.end())->second;
     };
-    
-    //    JobEntry *getLastStoppedJob(int *jobId);
-    
-    // TODO: Add extra methods or modify exisitng ones as needed
 };
 
 class JobsCommand : public BuiltInCommand {
@@ -510,9 +500,11 @@ public:
     void setPreviousUsedPathString(string previousUsed) {
         previousUsedPath = previousUsed;
     }
-    void setPreviousUsedPathChar( const char* arr) {
-        previousUsedPath=arr;
+    
+    void setPreviousUsedPathChar(const char* arr) {
+        previousUsedPath = arr;
     }
+    
     string getPreviousUsedPath() {
         return previousUsedPath;
     }
