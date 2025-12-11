@@ -86,6 +86,11 @@ int _parseCommandLine(const char* cmd_line, char** args) {
     int i = 0;
     std::istringstream iss(_trim(string(cmd_line)));
     for (std::string s; iss >> s;) {
+        // [FIX] Prevent writing past the array size
+        if (i >= COMMAND_MAX_ARGS) {
+            break;
+        }
+        
         args[i] = (char*) malloc(s.length() + 1);
         memset(args[i], 0, s.length() + 1);
         strcpy(args[i], s.c_str());
@@ -179,6 +184,13 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
 //    printf("post remove: %s\n", cmd_line);
 
 //    printf("first word: %s\n", firstWord.c_str());
+    
+    //PIPE
+    size_t pipe_pos = string(cmd_line).find_first_of('|');
+    // Check the position directly against std::string::npos
+    if (pipe_pos != std::string::npos) {
+        return new PipeCommand(cmd_line);
+    }
 
 // Find the position of the redirection character
     size_t redirect_pos = string(cmd_line).find_first_of('>');
@@ -191,13 +203,8 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         // For now, assume a found '>' means redirection must be handled
         return new RedirectionCommand(cmd_line);
     }
-    
-    //PIPE
-    size_t pipe_pos = string(cmd_line).find_first_of('|');
-    // Check the position directly against std::string::npos
-    if (pipe_pos != std::string::npos) {
-        return new PipeCommand(cmd_line);
-    }
+
+
 
 //    std::cout << "find_first_of " << redirect_pos << std::endl;
     // --- Remainder of Command Identification Logic ---
@@ -258,8 +265,18 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
 
 Command::Command(const char* cmd_line) {
     strcpy(this->cmd_line, cmd_line);
+    memset(args, 0, sizeof(args));
     numArgs = _parseCommandLine(cmd_line, args);
 };
+
+Command::~Command() {
+    for (int i = 0; i < COMMAND_MAX_ARGS; i++) {
+        if (args[i] != nullptr) {
+            free(args[i]);
+            args[i] = nullptr;
+        }
+    }
+}
 
 void GetCurrDirCommand::execute() {
     char cwd[PATH_MAX];
@@ -272,7 +289,7 @@ void SmallShell::executeCommand(const char* cmd_line) {
     // TODO: Add your implementation here
     Command* cmd = CreateCommand(cmd_line);
     cmd->execute();
-
+    
     // By default, we own the pointer and must delete it.
     bool shouldDelete = true;
     
@@ -322,20 +339,20 @@ ChangeDirCommand::ChangeDirCommand(const char* cmdLine) : BuiltInCommand(
             newTargetPath = args[1];
         }
         
-        char p[PATH_MAX];
-        getcwd(p, PATH_MAX);
+
 //        cout <<"set prev to : "<<p<<endl;
-        smash.setPreviousUsedPathChar(p);
+
     }
 }
 
 void ChangeDirCommand::execute() {
-    
-    if (chdir(newTargetPath.c_str()) == 0) {
-        SmallShell& smash = SmallShell::getInstance();
-    } else {
+    char p[PATH_MAX];
+    getcwd(p, PATH_MAX);
+    if (chdir(newTargetPath.c_str()) != 0) {
         perror("smash error: cd: invalid path");
     }
+    auto& smash = SmallShell::getInstance();
+    smash.setPreviousUsedPathChar(p);
 }
 
 ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList* jobsList)
@@ -431,8 +448,9 @@ void ComplexExternalCommand::execute() {
             setpgrp();
             signal(SIGINT, SIG_DFL);
             
-            char* const argv[] = {"/bin/bash", "-c",
-                                  const_cast<char*>(getCmdLine()), NULL};
+            char* const argv[] = {(char*) "/bin/bash",
+                                  (char*) "-c",
+                                  (char*) getCmdLine(), nullptr};
             execv(argv[0], argv);
             perror("smash error: excecution failed");
         } else if (pid > 0) {
@@ -449,8 +467,8 @@ void ComplexExternalCommand::execute() {
         int pid = fork();
         if (pid == 0) {
             //child
-            char* argv[] = {"/bin/bash", "-c", const_cast<char*>(getCmdLine()),
-                            NULL};
+            char* argv[] = {(char *)"/bin/bash", (char *)"-c", const_cast<char*>(getCmdLine()),
+                            nullptr};
             execv(argv[0], argv);
             perror("smash error: excecution failed");
             return;
@@ -471,6 +489,11 @@ void ComplexExternalCommand::execute() {
 void SimpleExternalCommand::execute() {
 //    std::cout << "Executing SimpleExternalCommand: " << getCmdLine()
 //              << std::endl;
+    if (args[0] == nullptr) {
+        // Nothing to execute
+        return;
+    }
+    
     if (!isBG) {
         //foreground
         int pid = fork();
@@ -479,7 +502,6 @@ void SimpleExternalCommand::execute() {
             setpgrp();
             signal(SIGINT, SIG_DFL);
             
-            // char* const argv[] = {args , NULL};
             execvp(args[0], args);
             perror("smash error: excecution failed");
             _exit(1);
@@ -673,7 +695,7 @@ UnAliasCommand::UnAliasCommand(const char* cmd_line,
     
     for (int i = 1; i < numArgs; ++i) {
         
-        if (aliasesMap->erase(args[i])) {
+        if (aliasesMap->erase(args[i]) == 0) {
             throw std::runtime_error("smash error: unalias: " +
                                      string(args[i]) + " alias does not exist");
         }
@@ -725,6 +747,7 @@ int UnSetEnvCommand::checkVarExistsInProc(const std::string& targetVar) {
 }
 
 void UnSetEnvCommand::removeFromEnviron(const std::string& targetVar) {
+    extern char **environ;
     size_t len = (targetVar).length();
     
     // straight out of man 7 - https://man7.org/tlpi/code/online/dist/proc/setenv.c.html
@@ -751,7 +774,8 @@ void SysInfoCommand::execute() {
         printf("Hostname: %s\n", name.nodename);
         printf("Kernel: %s ", name.release);
         for (int i = 0; i < PATH_MAX; ++i) {
-            if (name.version[i] == ' ' && name.version[i] == '\n' &&
+            if (name.version[i] == ' ' ||
+                name.version[i] == '\n' ||
                 name.version[i] == '\0') {
                 cout << name.version[i];
             } else {
@@ -840,7 +864,7 @@ void RedirectionCommand::execute() {
         
         Command* cmd = SmallShell::getInstance()
                 .CreateCommand(innerCommand.c_str());
-
+        
         // Check if the command is a BuiltInCommand
         auto* built_in_cmd = dynamic_cast<BuiltInCommand*>(cmd);
         
@@ -1024,49 +1048,33 @@ DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
 int getKBDiskUsage(const std::string& path) {
     struct stat st;
     
-    // 1. Get file status (size and type)
-    if (stat(path.c_str(), &st) == -1) {
-        // Use cerr for errors, as stdout might be redirected
+    // CHANGE: Use lstat instead of stat
+    if (lstat(path.c_str(), &st) == -1) {
         std::cerr << "smash error: stat failed for " << path << std::endl;
         return 0;
     }
     
-    // Initialize total usage with the size of the current file/directory, rounded up to KB
-    // (st.st_blocks * 512) is the accurate disk usage on many systems,
-    // but st.st_size / 1024 is often used for simplicity in shell projects.
     int total_usage_kb = (st.st_size + 1023) / 1024;
-    
-    // 2. Check if it is a directory
     if (S_ISDIR(st.st_mode)) {
-        //TODO: cant use open dir!
         DIR* dir = opendir(path.c_str());
         if (!dir) {
-            std::cerr << "smash error: opendir failed for " << path
-                      << std::endl;
-            return total_usage_kb; // Return size of the directory entry itself
+            // Note: failing to open a dir shouldn't necessarily return 0 size for the dir entry itself,
+            // but returning total_usage_kb is fine.
+            return total_usage_kb;
         }
         
         struct dirent* entry;
-        //cant use readdir
         while ((entry = readdir(dir)) != nullptr) {
             std::string name = entry->d_name;
-            
-            // Skip '.' (current directory) and '..' (parent directory)
             if (name == "." || name == "..") {
                 continue;
             }
-            
-            // Construct the full path for the recursive call
             std::string full_path = path + "/" + name;
-            
-            // Recursively calculate and add usage
             total_usage_kb += getKBDiskUsage(full_path);
         }
-        //TODO: cnat use closedir
         closedir(dir);
     }
     
-    // 3. Return the total size (current size + size of all contents)
     return total_usage_kb;
 };
 
@@ -1095,6 +1103,6 @@ WhoAmICommand::WhoAmICommand(const char* cmdLine) : Command(cmdLine) {
 }
 
 void WhoAmICommand::execute() {
-    printf("%lld\n%lld\n%s%s\n", userId, groupId,
-           username, homeDir);
+    printf("%ld\n%ld\n%s%s\n", (long) userId,
+           (long) groupId, username, homeDir);
 }

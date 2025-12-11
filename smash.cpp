@@ -11,9 +11,12 @@ int main(int argc, char *argv[]) {
     }
     SmallShell &smash = SmallShell::getInstance();
     while (true) {
-        std::cout << smash.getPrompt() << "> ";
+        std::cout << smash.getPrompt() << "> "<< flush;
         std::string cmd_line;
-        std::getline(std::cin, cmd_line);
+        if (!std::getline(std::cin, cmd_line)) {
+            // EOF reached (end of input file or Ctrl+D)
+            break; // Stop the shell
+        }
         try {
             smash.executeCommand(cmd_line.c_str());
             

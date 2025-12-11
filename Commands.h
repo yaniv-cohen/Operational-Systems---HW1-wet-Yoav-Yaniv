@@ -6,9 +6,10 @@
 #include <map>
 #include <string.h>
 #include <cstring>
-#include <unistd.h>
 #include <unordered_set>
+#include <unistd.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <fcntl.h>
 
 #define COMMAND_MAX_LENGTH (200)
@@ -22,16 +23,12 @@ public:
     int numArgs;
     Command(const char* cmd_line);
     
-    virtual ~Command() {
-        for (int i = 0; i < numArgs; i++) {
-            free(args[i]);
-        }
-    };
+    virtual ~Command();
     
     virtual void execute() = 0;
     
-    // virtual void prepare();
-    // virtual void cleanup();
+//     virtual void prepare();
+//     virtual void cleanup();
     //  TODO: Add your extra methods if needed
     const char* getCmdLine() const {
         return cmd_line;
@@ -219,8 +216,8 @@ public:
     class JobEntry {
         // TODO: Add your data members
     public:
-        Command* cmd = nullptr;
         int jobId = 1;
+        Command* cmd = nullptr;
         bool isFinished = false;
         int pid = 0;
         
@@ -279,13 +276,10 @@ public:
     };
     
     void printJobsList() {
-        for (const auto& [id, job]: jobs) {
-            std::cout << "[" << id << "] " << job.cmd->getCmdLine()
-                      << std::endl;
+        for (const auto& entry : jobs) {
+            cout << "[" << entry.second.jobId << "] " << entry.second.cmd->getCmdLine() << " : " << entry.second.pid << " ";
         }
     };
-
-// void killAllJobs(){};
     
     void removeFinishedJobs();
     
@@ -481,7 +475,7 @@ public:
     
     pid_t getFgPid() { return fgPid; };
     
-    pid_t setFgPid(pid_t newPid) { fgPid = newPid; };
+    void setFgPid(pid_t newPid) { fgPid = newPid; }
 
     static bool isBuiltinCommand(const string &s);
 };
