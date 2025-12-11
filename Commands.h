@@ -18,7 +18,7 @@ using namespace std;
 class Command {
     char cmd_line[COMMAND_MAX_LENGTH];
 public:
-    char* args[COMMAND_MAX_ARGS];
+    char* args[COMMAND_MAX_ARGS] = {nullptr};
     int numArgs;
     Command(const char* cmd_line);
     
@@ -59,7 +59,7 @@ public:
     ExternalCommand(const char* cmd_line, bool isBG) : Command(cmd_line),
                                                        isBG(isBG) {
     };
-    
+    bool getIsBG(){return isBG;}
     virtual ~ExternalCommand() = default;
 };
 

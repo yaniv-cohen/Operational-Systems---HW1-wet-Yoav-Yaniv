@@ -273,7 +273,20 @@ void SmallShell::executeCommand(const char* cmd_line) {
     Command* cmd = CreateCommand(cmd_line);
     cmd->execute();
 
-//        delete cmd;
+    // By default, we own the pointer and must delete it.
+    bool shouldDelete = true;
+    
+    // Check if it's an External Command running in the Background
+    auto* extCmd = dynamic_cast<ExternalCommand*>(cmd);
+    if (extCmd && extCmd->isBG) {
+        // If it's a background command, ownership was (hopefully) transferred
+        // to the JobsList. We should NOT delete it.
+        shouldDelete = false;
+    }
+    
+    if (shouldDelete) {
+        delete cmd;
+    }
 }
 
 SetPromptCommand::SetPromptCommand(const char* cmdLine) : BuiltInCommand(
@@ -753,8 +766,8 @@ void SysInfoCommand::execute() {
         return; // Return a non-zero exit code to signal failure
     }
     
-    std::ifstream stat_file("/proc/stat");
-    std::string line;
+    ifstream stat_file("/proc/stat");
+    string line;
     long boot_time_sec = 0;
 
 // Search for the "btime" line in /proc/stat
@@ -795,7 +808,6 @@ RedirectionCommand::RedirectionCommand(const char* cmdLine) : Command(cmdLine) {
     
     innerCommand = cmdS.substr(0, firstArrowIdx);
     outerFile = _trim(cmdS.substr(lastArrowIdx + 1));
-//    cout << innerCommand << " into file: " << outerFile << endl;
 }
 
 void RedirectionCommand::execute() {
@@ -829,7 +841,7 @@ void RedirectionCommand::execute() {
         Command* cmd = SmallShell::getInstance()
                 .CreateCommand(innerCommand.c_str());
 
-// Check if the command is a BuiltInCommand
+        // Check if the command is a BuiltInCommand
         auto* built_in_cmd = dynamic_cast<BuiltInCommand*>(cmd);
         
         if (built_in_cmd) {
@@ -858,7 +870,6 @@ void RedirectionCommand::execute() {
             }
         }
     } else {
-//error
         perror("smash error: fork failed");
     }
 }
@@ -885,11 +896,11 @@ PipeCommand::PipeCommand(const char* cmdLine) : Command(cmdLine) {
     
     this->command1Line = line_str.substr(0, firstPipePos);
     this->command1Line = _trim(this->command1Line);
-    cout << "c1" << command1Line << endl;
+//    cout << "c1 " << command1Line << endl;
     
     this->command2Line = line_str.substr(splitPos);
     this->command2Line = _trim(this->command2Line);
-    cout << " into " << command2Line << endl;
+//    cout << " into " << command2Line << endl;
 };
 
 void PipeCommand::execute() {
@@ -1084,6 +1095,6 @@ WhoAmICommand::WhoAmICommand(const char* cmdLine) : Command(cmdLine) {
 }
 
 void WhoAmICommand::execute() {
-    printf("%lld\n%lld\n%s %s\n", userId, groupId,
+    printf("%lld\n%lld\n%s%s\n", userId, groupId,
            username, homeDir);
 }
