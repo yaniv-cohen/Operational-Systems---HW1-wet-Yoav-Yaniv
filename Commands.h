@@ -20,13 +20,10 @@ class Command {
 
 public:
     Command(const char* cmd_line) {
-        this->cmd_line = new char[COMMAND_MAX_LENGTH];
         strcpy(this->cmd_line, cmd_line);
     };
     
-    virtual ~Command() {
-        delete[] cmd_line;
-    };
+    virtual ~Command() = default;
     
     virtual void execute() = 0;
     

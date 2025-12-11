@@ -279,22 +279,22 @@ ChangeDirCommand::ChangeDirCommand(const char* cmdLine) : BuiltInCommand(
         cmdLine) {
     
     char* args[COMMAND_MAX_ARGS];
-    int i = _parseCommandLine(cmdLine, args);
+    int numArgs = _parseCommandLine(cmdLine, args);
     
     auto& smash = SmallShell::getInstance();
-    if (i < 2) {
+    if (numArgs < 2) {
         perror("no arguments to cd\n");
     }
-    if (i > 2) {
+    if (numArgs > 2) {
         perror("smash error: cd: too many arguments");
-    } else if (i == 2) {
+    } else if (numArgs == 2) {
         
         if (strcmp("-", args[1]) == 0 &&
             smash.getPreviousUsedPath() == "\n") {
             perror("smash error: cd: OLDPWD not set");
-        }else if (strcmp("-", args[1]) == 0) { // set prev to current
+        } else if (strcmp("-", args[1]) == 0) { // set prev to current
 //            cout<< "move to prev:" <<smash.getPreviousUsedPath()<<endl;
-            newTargetPath= smash.getPreviousUsedPath();
+            newTargetPath = smash.getPreviousUsedPath();
         } else {
             newTargetPath = args[1];
         }
@@ -320,28 +320,28 @@ ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList* jobsList)
         : BuiltInCommand(cmd_line), jobsList(jobsList) {
     
     char* args[COMMAND_MAX_ARGS];
-    int num_args = _parseCommandLine(cmd_line, args);
+    int numArgs = _parseCommandLine(cmd_line, args);
     targetJobId = -1;
     
-    if (num_args == 1) { // no arguments - use the last job
+    if (numArgs == 1) { // no arguments - use the last job
         // Check if the list is empty before attempting to access the last job
         if (jobsList->jobs
                 .empty()) { // You must implement an isEmpty or similar check
-            throw runtime_error("smash error: fg: jobs list is empty");
+            perror("smash error: fg: jobs list is empty");
         }
         // Assuming getLastJob() returns a valid pointer to a JobEntry
         targetJobId = jobsList->getLastJob()->jobId;
         
-    } else if (num_args == 2) { // 1 argument - job ID
+    } else if (numArgs == 2) { // 1 argument - job ID
         try {
             // Safety check for integer conversion
             targetJobId = std::stoi(args[1]);
         } catch (const std::exception& e) {
-            throw runtime_error("smash error: fg: invalid job ID argument");
+            perror("smash error: fg: invalid job ID argument");
         }
         
     } else {
-        throw runtime_error("smash error: fg: invalid arguments");
+        perror("smash error: fg: invalid arguments");
     }
     
 }
@@ -392,7 +392,7 @@ QuitCommand::QuitCommand(const char* cmd_line, JobsList* jobsList) :
         jl = jobsList;
         jobsList->removeFinishedJobs();
         cout << "smash: sending SIGKILL signal to " << jobsList->jobs.size()
-             << " jobs:";
+             << " jobs:" << flush;
     }
 }
 
@@ -479,11 +479,12 @@ void SimpleExternalCommand::execute() {
             signal(SIGINT, SIG_DFL);
             
             char* args[COMMAND_MAX_ARGS];
-            _parseCommandLine(getCmdLine(), args);
+            int numArgs = _parseCommandLine(getCmdLine(), args);
             // printAllArgs(args);
             // char* const argv[] = {args , NULL};
             execvp(args[0], args);
             perror("smash error: excecution failed");
+            _exit(1);
         } else if (pid > 0) {
             //parent
             auto& smash = SmallShell::getInstance();
@@ -505,6 +506,7 @@ void SimpleExternalCommand::execute() {
             // char* const argv[] = {args , NULL};
             execvp(args[0], args);
             perror("smash error: excecution failed");
+            _exit(1);
         } else if (pid > 0) {
             //parent
             // waitpid(pid, nullptr, 0);
@@ -581,7 +583,7 @@ KillCommand::KillCommand(const char* cmdLine,
         signalNumber = std::stoi(signal_str);
     } catch (const std::exception& e) {
         // Handle non-integer signal argument
-        throw runtime_error("smash error: kill: invalid signal number");
+        perror("smash error: kill: invalid signal number");
     }
     
     // 3. Job ID Parsing
@@ -590,7 +592,7 @@ KillCommand::KillCommand(const char* cmdLine,
         targetJobId = std::stoi(args[2]);
     } catch (const std::exception& e) {
         // Handle non-integer job ID argument
-        throw runtime_error("smash error: kill: invalid job ID argument");
+        perror("smash error: kill: invalid job ID argument");
     }
     
     // TODO: delete args
