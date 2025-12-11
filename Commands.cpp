@@ -766,7 +766,6 @@ void SysInfoCommand::execute() {
     }
     
     if (boot_time_sec == 0) {
-//            return "N/A"; // Error reading file
         perror("Error reading file");
     }
 
@@ -790,10 +789,8 @@ RedirectionCommand::RedirectionCommand(const char* cmdLine) : Command(cmdLine) {
     } else if (firstArrowIdx + 1 == lastArrowIdx) {
         isAppend = true;
     } else {
-        perror("smash error: invalid arguments");
+        throw std::runtime_error("smash error: invalid arguments");
     }
-//    cout<<"firstArrowIdx " <<firstArrowIdx <<" lastArrowIdx " << lastArrowIdx
-//    << "isAppend " << isAppend << endl;
     
     innerCommand = cmdS.substr(0, firstArrowIdx);
     outerFile = _trim(cmdS.substr(lastArrowIdx + 1));
@@ -870,25 +867,27 @@ PipeCommand::PipeCommand(const char* cmdLine) : Command(cmdLine) {
     
     // Find the position of the first pipe character
     size_t firstPipePos = line_str.find('|');
-    
     // Determine the pipe type: '|&' or '|'
-    bool is_stderr_pipe = false;
+    bool is_stderr_pipe = false; // Default to false
     if (firstPipePos != std::string::npos &&
+        firstPipePos + 1 < line_str.length() && // Safety check for bounds
         line_str[firstPipePos + 1] == '&') {
+        
+        is_stderr_pipe = true;
         isNormalPipe = false;
     } else {
+        is_stderr_pipe = false;
         isNormalPipe = true;
     }
     // Determine the split position (either '|' or '|&')
     size_t splitPos = firstPipePos + (is_stderr_pipe ? 2 : 1);
     
-    // Extract and trim command1 (everything before the pipe symbol(s))
     this->command1Line = line_str.substr(0, firstPipePos);
-    this->command1Line = _trim(this->command1Line); // Assumes _trim is global
+    this->command1Line = _trim(this->command1Line);
     cout << "c1" << command1Line << endl;
-    // Extract and trim command2 (everything after the pipe symbol(s))
+    
     this->command2Line = line_str.substr(splitPos);
-    this->command2Line = _trim(this->command2Line); // Assumes _trim is global
+    this->command2Line = _trim(this->command2Line);
     cout << " into " << command2Line << endl;
 };
 
@@ -906,19 +905,36 @@ void PipeCommand::execute() {
         close(pfd[0]); // Close read end
         
         // Redirect stdout (1) or stderr (2) to the pipe's write end (pfd[1])
-        int fd_to_redirect = isNormalPipe ? 2 : 1;
+        int fd_to_redirect = isNormalPipe ? 1 : 2;
         if (dup2(pfd[1], fd_to_redirect) == -1) {
             perror("smash error: dup2 failed");
             _exit(1);
         }
         close(pfd[1]); // Close write end //MAYBE WRONG
         
-        // Execute command1 (using /bin/bash -c for flexibility)
-        // TODO: BuiltIn Command
-        if (execl("/bin/bash", "bash", "-c", command1Line.c_str(), nullptr) ==
-            -1) {
-            perror("smash error: execl failed");
-            _exit(1);
+        Command* cmd = SmallShell::getInstance()
+                .CreateCommand(command1Line.c_str());
+
+// Check if the command is a BuiltInCommand
+        auto* built_in_cmd = dynamic_cast<BuiltInCommand*>(cmd);
+        
+        if (built_in_cmd) {
+            // Run the built-in command directly in the child process.
+            cmd->execute();
+            
+            // IMPORTANT: After the built-in command finishes, the child process must terminate.
+            delete cmd; // Clean up the Command object created by CreateCommand
+            _exit(0);
+        } else {
+            // Clean up the Command object before exec, though exec generally cleans up memory.
+            delete cmd;
+            
+            if (execl("/bin/bash", "bash", "-c", command1Line.c_str(),
+                      nullptr) ==
+                -1) {
+                perror("smash error: execl failed");
+                _exit(1);
+            }
         }
     }
     
@@ -936,11 +952,30 @@ void PipeCommand::execute() {
         }
         close(pfd[0]); // Close read end
         
-        // Execute command2
-        if (execl("/bin/bash", "bash", "-c", command2Line.c_str(), nullptr) ==
-            -1) {
-            perror("smash error: execl failed");
-            _exit(1);
+        
+        Command* cmd = SmallShell::getInstance()
+                .CreateCommand(command2Line.c_str());
+
+// Check if the command is a BuiltInCommand
+        auto* built_in_cmd = dynamic_cast<BuiltInCommand*>(cmd);
+        
+        if (built_in_cmd) {
+            // Run the built-in command directly in the child process.
+            cmd->execute();
+            
+            // IMPORTANT: After the built-in command finishes, the child process must terminate.
+            delete cmd; // Clean up the Command object created by CreateCommand
+            _exit(0);
+        } else {
+            // Clean up the Command object before exec, though exec generally cleans up memory.
+            delete cmd;
+            
+            if (execl("/bin/bash", "bash", "-c", command2Line.c_str(),
+                      nullptr) ==
+                -1) {
+                perror("smash error: execl failed");
+                _exit(1);
+            }
         }
     } else {
         
@@ -958,7 +993,7 @@ void PipeCommand::execute() {
 DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
     if (numArgs == 1) {
         if (getcwd(this->path, PATH_MAX) == nullptr) {
-            throw std::runtime_error(
+            perror(
                     "smash error: du: cannot get current directory");
         }
     } else if (numArgs == 2) {

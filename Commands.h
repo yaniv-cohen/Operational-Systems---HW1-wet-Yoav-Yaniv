@@ -388,40 +388,7 @@ public:
     virtual ~AliasCommand() {
     }
     
-    int isValidAliasName(string& s) {
-        for (char c: s) {
-            if ((c < 0 || c > 9) && (c < 'a' || c > 'z') &&
-                (c < 'A' || c > 'Z') && c != '_')
-                return -1;
-        }
-        vector<string> illegals = {
-                "chprompt",
-                "showpid",
-                "pwd",
-                "cd",
-                "jobs",
-                "fg",
-                "quit",
-                "kill",
-                "alias",
-                "unalias",
-                "unsetenv",
-                "sysinfo",
-                "du",
-                "whoami",
-                "usbinfo",
-                ""
-        };
-        for (auto i: illegals) {
-            if (s.compare(i) == 0) {
-                return 0;
-            }
-        }
-        if (aliasesMap->find(s) != aliasesMap->end()) {
-            return 0;
-        }
-        return 1;
-    };
+    int isValidAliasName(string& s);
     void execute() override;
 };
 
@@ -515,7 +482,8 @@ public:
     pid_t getFgPid() { return fgPid; };
     
     pid_t setFgPid(pid_t newPid) { fgPid = newPid; };
-    // TODO: add extra methods as needed
+
+    static bool isBuiltinCommand(const string &s);
 };
 
 #endif // SMASH_COMMAND_H_
