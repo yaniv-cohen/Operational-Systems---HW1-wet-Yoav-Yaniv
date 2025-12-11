@@ -31,6 +31,34 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 #define FUNC_EXIT()
 #endif
 
+bool SmallShell::isBuiltinCommand(const std::string& s) {
+    vector<string> illegals = {
+            "chprompt",
+            "showpid",
+            "pwd",
+            "cd",
+            "jobs",
+            "fg",
+            "quit",
+            "kill",
+            "alias",
+            "unalias",
+            "unsetenv",
+            "sysinfo",
+            "du",
+            "whoami",
+            "usbinfo",
+            ""
+    };
+    
+    for (auto i: illegals) {
+        if (s == i) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void printAllArgs(char** args) {
     int i = 0;
     while (args[i] != nullptr) {
@@ -93,14 +121,8 @@ void _removeBackgroundSign(char* cmd_line) {
 // TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell() = default;
-//{
-//    // TODO: add your implementation
-//}
 
 SmallShell::~SmallShell() = default;
-//{
-//    // TODO: add your implementation
-//}
 
 /**
  * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
@@ -462,17 +484,12 @@ void SimpleExternalCommand::execute() {
         int pid = fork();
         if (pid == 0) {
             //child
-            // char* const argv[] = {args , NULL};
             execvp(args[0], args);
             perror("smash error: excecution failed");
             _exit(1);
         } else if (pid > 0) {
             //parent
-            // waitpid(pid, nullptr, 0);
-//            std::cout << "not waiting" << std::endl;
             SmallShell::getInstance().getJobsList().addJob(this, pid, false);
-//            std::cout << "added to joblist" << std::endl;
-            // SmallShell::getInstance().getJobsList().printJobsList();
         } else {
             perror("smash error: fork failed");
         }
@@ -480,7 +497,6 @@ void SimpleExternalCommand::execute() {
 }
 
 void JobsList::removeFinishedJobs() {
-// We must use a safe iteration pattern that allows element removal.
     for (auto it = jobs.begin(); it != jobs.end();) {
         int status;
         
@@ -516,16 +532,13 @@ KillCommand::KillCommand(const char* cmdLine,
                                                jobsList(jobsList) {
     
     if (numArgs != 3) {
-        // The kill command requires exactly 3 tokens: "kill", "-<signum>", and "<job-id>"
         throw runtime_error("smash error: kill: invalid arguments");
     }
     
-    // Initialize members
     targetJobId = -1;
     signalNumber = -1;
     
-    // 2. Signal Number Parsing
-    // Check if the signal argument starts with '-'
+    // Signal Number Parsing
     if (stoi(args[1]) >= 0 || args[1][0] != '-') {
         throw runtime_error("smash error: kill: invalid arguments");
     }
@@ -541,15 +554,13 @@ KillCommand::KillCommand(const char* cmdLine,
         perror("smash error: kill: invalid signal number");
     }
     
-    // 3. Job ID Parsing
+    // Job ID Parsing
     try {
         // Convert the job ID argument to an integer
         targetJobId = std::stoi(args[2]);
     } catch (const std::exception& e) {
-        // Handle non-integer job ID argument
         throw std::runtime_error("smash error: kill: invalid arguments");
     }
-    
 }
 
 AliasCommand::AliasCommand(const char* cmdLine,
@@ -567,7 +578,6 @@ AliasCommand::AliasCommand(const char* cmdLine,
     // Convert to std::string
     string cmd = _trim(string(cmdLine));
     
-    //alias cat='gggg'
     // Find the first space before alias name
     size_t firstSpace = cmd.find_first_of(WHITESPACE);
     
@@ -581,19 +591,17 @@ AliasCommand::AliasCommand(const char* cmdLine,
                 "smash error: alias: invalid alias format");
     }
     
-    // alias name=   'command'
-    
-    // 1. Extract the Alias Name
+    // Extract the Alias Name
     // The name is the substring between the first space and the '='
-    string aliasName = cmd.substr(firstSpace, equalsSignPos - firstSpace);
-    aliasName = _trim(aliasName); // Clean up
+    string rawAliasName = cmd.substr(firstSpace, equalsSignPos - firstSpace);
+    rawAliasName = _trim(rawAliasName); // Clean up
     
-    // 2. Extract the Command Definition
+    // Extract the Command Definition
     // The command definition starts after the '='
     string commandDef = cmd.substr(equalsSignPos + 1);
     commandDef = _trim(commandDef); // Clean up whitespace around the command
     
-    // 3. Validation and Cleaning (Checking quotes)
+    // Validation and Cleaning (Checking quotes)
     if (commandDef.empty() || commandDef.front() != '\'' ||
         commandDef.back() != '\'') {
         throw runtime_error(
@@ -602,7 +610,7 @@ AliasCommand::AliasCommand(const char* cmdLine,
     
     // Store the cleaned alias name and the command content (inside the quotes)
     // The actual command is the substring between the quotes.
-    newAliasName = aliasName;
+    newAliasName = rawAliasName;
     newAliasCommand = commandDef.substr(1, commandDef.length() - 2);
     
     // Check if the alias name itself is valid (e.g., not containing '=' or illegal characters)
@@ -613,7 +621,23 @@ AliasCommand::AliasCommand(const char* cmdLine,
         throw runtime_error("smash error: alias: " + newAliasName +
                             " already exists or is a reserved command");
     }
-}
+};
+
+int AliasCommand::isValidAliasName(std::string& s) {
+    for (char c: s) {
+        if ((c < 0 || c > 9) && (c < 'a' || c > 'z') &&
+            (c < 'A' || c > 'Z') && c != '_')
+            return -1;
+    }
+    bool isBuiltinCommand = SmallShell::isBuiltinCommand(s);
+    if (isBuiltinCommand) {
+        return 0;
+    }
+    if (aliasesMap->find(s) != aliasesMap->end()) {
+        return 0;
+    }
+    return 1;
+};
 
 void AliasCommand::execute() {
     if (emptyAlias) {
@@ -687,46 +711,23 @@ int UnSetEnvCommand::checkVarExistsInProc(const std::string& targetVar) {
     return -1;
 }
 
-void UnSetEnvCommand::removeFromEnviron(const std::string& targetVar, int idx) {
-    while (environ[idx] != nullptr) {
-        environ[idx] = environ[idx + 1];
-        idx++;
+void UnSetEnvCommand::removeFromEnviron(const std::string& targetVar) {
+    size_t len = (targetVar).length();
+    
+    // straight out of man 7 - https://man7.org/tlpi/code/online/dist/proc/setenv.c.html
+    for (char** ep = environ; *ep != nullptr;) {
+        if (std::strncmp(*ep, targetVar.c_str(), len) == 0 &&
+            (*ep)[len] == '=') {
+            /* Remove found entry by shifting all successive entries
+               back one element */
+            for (char** sp = ep; *sp != nullptr; sp++)
+                *sp = *(sp + 1);
+            /* Continue around the loop to further instances of 'name' */
+        } else {
+            ep++;
+        }
     }
-}
-//void UnSetEnvCommand::execute() {
-//    // TODO: fix this
-//    // Iterate over all requested variable names
-//    for (int j = 1; j < numArgs; j++) {
-//        string varName = string(args[j]);
-//
-//        // The environment variable format is "VARNAME=VALUE".
-//        std::string prefix = varName + "=";
-//
-//        int i = 0;
-//        // Locate the pointer to the variable in the global environ array.
-//        while (environ[i] != nullptr) {
-//
-//            // Check if the current entry starts with the target prefix.
-//            if (strncmp(environ[i], prefix.c_str(), prefix.length()) == 0) {
-//
-//                // --- Variable found: Perform manual shift (Deletion) ---
-//                cout << "Variable found " << environ[i] << endl;
-//                int j = i;
-//                // Shift all subsequent pointers up by one to overwrite the found entry.
-//                do {
-//                    environ[j] = environ[j + 1];
-//                    j++;
-//                } while (environ[j] != nullptr);
-//                cout << "now Variable found " << environ[i] << endl;
-//                // We need to re-check the current index 'i' because it now holds the
-//                // next environment variable.
-//                i--;
-//                break;
-//            }
-//            i++; // Move to the next environment entry
-//        }
-//    }
-//}
+};
 
 void SysInfoCommand::execute() {
     
