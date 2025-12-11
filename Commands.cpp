@@ -270,7 +270,7 @@ Command::Command(const char* cmd_line) {
 };
 
 Command::~Command() {
-    for (int i = 0; i < COMMAND_MAX_ARGS; i++) {
+    for (int i = 0; i < COMMAND_MAX_ARGS+1; i++) {
         if (args[i] != nullptr) {
             free(args[i]);
             args[i] = nullptr;
@@ -333,14 +333,12 @@ ChangeDirCommand::ChangeDirCommand(const char* cmdLine) : BuiltInCommand(
             smash.getPreviousUsedPath() == "\n") {
             throw std::runtime_error("smash error: cd: OLDPWD not set");
         } else if (strcmp("-", args[1]) == 0) { // set prev to current
-//            cout<< "move to prev:" <<smash.getPreviousUsedPath()<<endl;
             newTargetPath = smash.getPreviousUsedPath();
         } else {
             newTargetPath = args[1];
         }
         
 
-//        cout <<"set prev to : "<<p<<endl;
 
     }
 }
@@ -417,22 +415,18 @@ void QuitCommand::execute() {
     
     if (strcmp(args[1], "kill") == 0) {
         cout << "smash: sending SIGKILL signal to " << jl->jobs.size()
-             << " jobs:" << flush;
-        bool first = true;
+             << " jobs:" << endl;
+ 
         for (auto it = jl->jobs.begin();
              it != jl->jobs.end(); it++) {
-            if (first) {
-                first = false;
-                cout << endl;
-            }
-            cout << it->second.pid << ": " << it->second.cmd->getCmdLine()
-                 << endl;
             if (kill(it->second.pid, 9) == -1) {
                 // Handle error, though often ignored for SIGKILL on exit
                 perror("smash error: kill failed");
             }
+            cout << it->second.pid << ": " << it->second.cmd->getCmdLine()
+                 << endl;
         }
-        kill(getpid(), 9);
+        exit(0);
     }
 }
 

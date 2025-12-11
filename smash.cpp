@@ -15,7 +15,6 @@ int main(int argc, char *argv[]) {
         std::string cmd_line;
         if (!std::getline(std::cin, cmd_line)) {
             // EOF reached (end of input file or Ctrl+D)
-            break; // Stop the shell
         }
         try {
             smash.executeCommand(cmd_line.c_str());

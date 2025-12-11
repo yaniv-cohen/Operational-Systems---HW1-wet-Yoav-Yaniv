@@ -19,7 +19,7 @@ using namespace std;
 class Command {
     char cmd_line[COMMAND_MAX_LENGTH];
 public:
-    char* args[COMMAND_MAX_ARGS] = {nullptr};
+    char* args[COMMAND_MAX_ARGS+1] = {nullptr};
     int numArgs;
     Command(const char* cmd_line);
     
@@ -78,8 +78,6 @@ public:
     ComplexExternalCommand(const char* cmd_line, bool isBG) : ExternalCommand(
             cmd_line,
             isBG) {
-//        std::cout << "in ComplexExternalCommand constructor BG=" << isBG
-//                  << std::endl;
     };
     
     virtual ~ComplexExternalCommand() {
