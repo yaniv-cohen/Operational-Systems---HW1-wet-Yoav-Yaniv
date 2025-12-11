@@ -657,9 +657,8 @@ void UnSetEnvCommand::execute() {
         if (location < 0) {
             throw std::runtime_error("smash error: unsetenv: " + varName
                                      + " does not exist");
-            return;
         }
-        removeFromEnviron(varName, location);
+        removeFromEnviron(varName);
     }
 }
 

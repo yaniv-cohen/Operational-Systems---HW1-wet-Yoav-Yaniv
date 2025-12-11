@@ -444,7 +444,7 @@ public:
     virtual ~UnSetEnvCommand() {
     }
     int checkVarExistsInProc( const string& s );
-    void removeFromEnviron( const string& s , int idx);
+    void removeFromEnviron( const string& s );
     void execute() override;
 };
 
