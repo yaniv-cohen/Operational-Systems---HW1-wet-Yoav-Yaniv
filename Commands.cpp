@@ -382,8 +382,8 @@ QuitCommand::QuitCommand(const char* cmd_line, JobsList* jobsList) :
         BuiltInCommand(cmd_line) {
     
     char* args[COMMAND_MAX_ARGS];
-    int num_args = _parseCommandLine(cmd_line, args);
-    if (num_args <= 1) {
+    int numArgs = _parseCommandLine(cmd_line, args);
+    if (numArgs <= 1) {
         doNothing = true;
         return;
     }
@@ -491,7 +491,6 @@ void SimpleExternalCommand::execute() {
             smash.setFgPid(pid);
             waitpid(pid, nullptr, 0);
             smash.setFgPid(-1);
-//            std::cout << "finished waiting" << std::endl;
         } else {
             perror("smash error: fork failed");
         }
