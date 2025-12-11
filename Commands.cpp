@@ -243,8 +243,6 @@ void GetCurrDirCommand::execute() {
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) != nullptr) {
         std::cout << cwd << std::endl;
-    } else {
-        perror("smash error: getcwd failed");
     }
 }
 
@@ -252,14 +250,12 @@ void SmallShell::executeCommand(const char* cmd_line) {
     // TODO: Add your implementation here
     Command* cmd = CreateCommand(cmd_line);
     cmd->execute();
-    
+
 //        delete cmd;
 }
 
 SetPromptCommand::SetPromptCommand(const char* cmdLine) : BuiltInCommand(
         cmdLine) {
-    char* args[COMMAND_MAX_ARGS];
-    int numArgs = _parseCommandLine(cmdLine, args);
     if (numArgs == 1) { // no arguments (just command)
         char name[] = "smash";
         setCmdLine(name);
@@ -276,19 +272,14 @@ void SetPromptCommand::execute() {
 ChangeDirCommand::ChangeDirCommand(const char* cmdLine) : BuiltInCommand(
         cmdLine) {
     
-    int numArgs = _parseCommandLine(cmdLine, args);
-    
     auto& smash = SmallShell::getInstance();
-    if (numArgs < 2) {
-        perror("no arguments to cd\n");
-    }
     if (numArgs > 2) {
-        perror("smash error: cd: too many arguments");
+        throw std::runtime_error("smash error: cd: too many arguments");
     } else if (numArgs == 2) {
         
         if (strcmp("-", args[1]) == 0 &&
             smash.getPreviousUsedPath() == "\n") {
-            perror("smash error: cd: OLDPWD not set");
+            throw std::runtime_error("smash error: cd: OLDPWD not set");
         } else if (strcmp("-", args[1]) == 0) { // set prev to current
 //            cout<< "move to prev:" <<smash.getPreviousUsedPath()<<endl;
             newTargetPath = smash.getPreviousUsedPath();
@@ -308,37 +299,32 @@ void ChangeDirCommand::execute() {
     if (chdir(newTargetPath.c_str()) == 0) {
         SmallShell& smash = SmallShell::getInstance();
     } else {
-        // TODO: catch this exception with "smash error: cd: invalid path"
         perror("smash error: cd: invalid path");
     }
 }
 
 ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList* jobsList)
         : BuiltInCommand(cmd_line), jobsList(jobsList) {
-    
-    char* args[COMMAND_MAX_ARGS];
-    int numArgs = _parseCommandLine(cmd_line, args);
     targetJobId = -1;
-    
     if (numArgs == 1) { // no arguments - use the last job
         // Check if the list is empty before attempting to access the last job
         if (jobsList->jobs
                 .empty()) { // You must implement an isEmpty or similar check
-            perror("smash error: fg: jobs list is empty");
+            throw runtime_error("smash error: fg: jobs list is empty");
+        } else {
+            targetJobId = jobsList->getLastJob()->jobId;
         }
-        // Assuming getLastJob() returns a valid pointer to a JobEntry
-        targetJobId = jobsList->getLastJob()->jobId;
         
     } else if (numArgs == 2) { // 1 argument - job ID
         try {
             // Safety check for integer conversion
             targetJobId = std::stoi(args[1]);
         } catch (const std::exception& e) {
-            perror("smash error: fg: invalid job ID argument");
+            throw runtime_error("smash error: fg: invalid arguments");
         }
         
     } else {
-        perror("smash error: fg: invalid arguments");
+        throw runtime_error("smash error: fg: invalid arguments");
     }
     
 }
@@ -349,24 +335,20 @@ void ForegroundCommand::execute() {
     
     if (it == jobsList->jobs.end()) {
         //no such id
-        throw std::runtime_error("smash error: fg: job-id does not exist");
+        throw std::runtime_error("smash error: fg: "
+                                 + to_string(targetJobId) +
+                                 " does not exist");
     }
-    
     
     // Use a reference to the JobEntry
     auto& targetJob = it->second;
-    
     // Check if the job is running or stopped (it shouldn't be 'finished' here)
     std::cout << (targetJob.cmd->getCmdLine()) << " " << targetJob.pid
               << std::endl;
     
-    
     //set group leader for Ctr+C
     auto& smash = SmallShell::getInstance();
     smash.setFgPid(targetJob.pid);
-    if (signal(SIGINT, ctrlCHandler) == SIG_ERR) {
-        perror("smash error: failed to set ctrl-C handler");
-    }
     // Wait for the foreground process to finish
     waitpid(targetJob.pid, nullptr, 0);
     smash.setFgPid(-1);
@@ -375,44 +357,31 @@ void ForegroundCommand::execute() {
     jobsList->removeJobById(targetJob.jobId);
 }
 
-QuitCommand::QuitCommand(const char* cmd_line, JobsList* jobsList) :
-        BuiltInCommand(cmd_line) {
-    
-    char* args[COMMAND_MAX_ARGS];
-    int numArgs = _parseCommandLine(cmd_line, args);
-    if (numArgs <= 1) {
-        doNothing = true;
-        return;
-    }
-    doNothing = false;
-    if (strcmp(args[1], "kill") == 0) {
-        jl = jobsList;
-        jobsList->removeFinishedJobs();
-        cout << "smash: sending SIGKILL signal to " << jobsList->jobs.size()
-             << " jobs:" << flush;
-    }
-}
-
 void QuitCommand::execute() {
     
-    if (doNothing) {
-        //        cout << "do nothing detected" << endl;
+    if (numArgs <= 1) {
         return;
     }
-    bool first = true;
-    for (auto it = jl->jobs.begin();
-         it != jl->jobs.end(); it++) {
-        if (first) {
-            first = false;
-            cout << endl;
+    
+    if (strcmp(args[1], "kill") == 0) {
+        cout << "smash: sending SIGKILL signal to " << jl->jobs.size()
+             << " jobs:" << flush;
+        bool first = true;
+        for (auto it = jl->jobs.begin();
+             it != jl->jobs.end(); it++) {
+            if (first) {
+                first = false;
+                cout << endl;
+            }
+            cout << it->second.pid << ": " << it->second.cmd->getCmdLine()
+                 << endl;
+            if (kill(it->second.pid, 9) == -1) {
+                // Handle error, though often ignored for SIGKILL on exit
+                perror("smash error: kill failed");
+            }
         }
-        cout << it->second.pid << ": " << it->second.cmd->getCmdLine() << endl;
-        if (kill(it->second.pid, 9) == -1) {
-            // Handle error, though often ignored for SIGKILL on exit
-            perror("smash error: kill failed");
-        }
+        kill(getpid(), 9);
     }
-    kill(getpid(), 9);
 }
 
 void ComplexExternalCommand::execute() {
@@ -475,9 +444,6 @@ void SimpleExternalCommand::execute() {
             setpgrp();
             signal(SIGINT, SIG_DFL);
             
-            char* args[COMMAND_MAX_ARGS];
-            int numArgs = _parseCommandLine(getCmdLine(), args);
-            // printAllArgs(args);
             // char* const argv[] = {args , NULL};
             execvp(args[0], args);
             perror("smash error: excecution failed");
@@ -496,9 +462,6 @@ void SimpleExternalCommand::execute() {
         int pid = fork();
         if (pid == 0) {
             //child
-            char* args[COMMAND_MAX_ARGS];
-            int numArgs = _parseCommandLine(getCmdLine(), args);
-            // printAllArgs(args);
             // char* const argv[] = {args , NULL};
             execvp(args[0], args);
             perror("smash error: excecution failed");
@@ -518,7 +481,7 @@ void SimpleExternalCommand::execute() {
 
 void JobsList::removeFinishedJobs() {
 // We must use a safe iteration pattern that allows element removal.
-    for (auto it = jobs.begin(); it != jobs.end(); ) {
+    for (auto it = jobs.begin(); it != jobs.end();) {
         int status;
         
         // Use WNOHANG (Non-blocking) to check if the child has terminated
@@ -541,21 +504,17 @@ void JobsList::removeFinishedJobs() {
 };
 
 void JobsList::removeJobById(const int jobId) {
-        auto it = jobs.find(jobId);
-        if (it != jobs.end()) {
-            delete it->second.cmd;
-            jobs.erase(it);
-        }
+    auto it = jobs.find(jobId);
+    if (it != jobs.end()) {
+        delete it->second.cmd;
+        jobs.erase(it);
+    }
 };
 
 KillCommand::KillCommand(const char* cmdLine,
                          JobsList* jobsList) : BuiltInCommand(cmdLine),
                                                jobsList(jobsList) {
     
-    char* args[COMMAND_MAX_ARGS];
-    int numArgs = _parseCommandLine(cmdLine, args);
-    
-    // 1. Argument Count Check
     if (numArgs != 3) {
         // The kill command requires exactly 3 tokens: "kill", "-<signum>", and "<job-id>"
         throw runtime_error("smash error: kill: invalid arguments");
@@ -588,62 +547,57 @@ KillCommand::KillCommand(const char* cmdLine,
         targetJobId = std::stoi(args[2]);
     } catch (const std::exception& e) {
         // Handle non-integer job ID argument
-        perror("smash error: kill: invalid job ID argument");
+        throw std::runtime_error("smash error: kill: invalid arguments");
     }
-    
-    // TODO: delete args
     
 }
 
 AliasCommand::AliasCommand(const char* cmdLine,
                            map<string, string>* aliasesMap) : BuiltInCommand(
         cmdLine), aliasesMap(
-        aliasesMap) { // Note: pass map by pointer/reference
-    
-    // Convert to std::string for easier manipulation
-    string cmd = _trim(string(cmdLine));
-    
-    // Find the first space to isolate the command name ("alias")
-    size_t firstSpace = cmd.find_first_of(WHITESPACE);
+        aliasesMap) {
     
     // Check if the command contains anything after "alias"
-    if (firstSpace == string::npos) {
+    if (numArgs == 1) {
         emptyAlias = true;
-        // Case 1: "alias" (Only the command name)
-        // This is not correct for the constructor; this logic should be in execute()
-        // but for now, we set flags or store the map reference.
         return;
     }
     emptyAlias = false;
-    // Find the first occurrence of '=' in the rest of the string
-    size_t equalsPos = cmd.find('=', firstSpace);
     
-    // Case 1: "alias" (handled above, but checking here for non-assignment)
-    if (equalsPos == string::npos) {
-        // If there are arguments but no '=', it's either an error or a request
-        // to check a single alias (like 'alias l'), which your spec may not require.
-        // For simplicity, we only implement assignment or list-all.
+    // Convert to std::string
+    string cmd = _trim(string(cmdLine));
+    
+    //alias cat='gggg'
+    // Find the first space before alias name
+    size_t firstSpace = cmd.find_first_of(WHITESPACE);
+    
+    
+    // Find the first occurrence of '=' in the rest of the string
+    size_t equalsSignPos = cmd.find_first_of('=');
+    
+    //TODO: change to REGEX
+    if (equalsSignPos == string::npos) {
         throw runtime_error(
-                "smash error: alias: invalid arguments (missing '=')");
+                "smash error: alias: invalid alias format");
     }
     
-    // Case 2: "alias name='command'"
+    // alias name=   'command'
     
     // 1. Extract the Alias Name
     // The name is the substring between the first space and the '='
-    string aliasName = cmd.substr(firstSpace, equalsPos - firstSpace);
-    aliasName = _trim(aliasName); // Clean up whitespace around the name
+    string aliasName = cmd.substr(firstSpace, equalsSignPos - firstSpace);
+    aliasName = _trim(aliasName); // Clean up
     
     // 2. Extract the Command Definition
     // The command definition starts after the '='
-    string commandDef = cmd.substr(equalsPos + 1);
+    string commandDef = cmd.substr(equalsSignPos + 1);
     commandDef = _trim(commandDef); // Clean up whitespace around the command
     
     // 3. Validation and Cleaning (Checking quotes)
     if (commandDef.empty() || commandDef.front() != '\'' ||
         commandDef.back() != '\'') {
         throw runtime_error(
-                "smash error: alias: command must be enclosed in single quotes");
+                "smash error: alias: invalid alias format");
     }
     
     // Store the cleaned alias name and the command content (inside the quotes)
@@ -652,13 +606,16 @@ AliasCommand::AliasCommand(const char* cmdLine,
     newAliasCommand = commandDef.substr(1, commandDef.length() - 2);
     
     // Check if the alias name itself is valid (e.g., not containing '=' or illegal characters)
-    if (!isValidAliasName(newAliasName)) {
-        perror("smash error: alias: invalid alias name");
+    int legalNameRes = isValidAliasName(newAliasName);
+    if (legalNameRes == -1) {
+        throw runtime_error("smash error: alias: invalid alias format");
+    } else if (legalNameRes == 0) {
+        throw runtime_error("smash error: alias: " + newAliasName +
+                            " already exists or is a reserved command");
     }
 }
 
 void AliasCommand::execute() {
-    
     if (emptyAlias) {
         for (auto& al: *aliasesMap) {
             cout << al.first << "='" << al.second << "'" << endl;
@@ -666,72 +623,111 @@ void AliasCommand::execute() {
         return;
     }
     aliasesMap->insert(pair<string, string>(newAliasName, newAliasCommand));
-    
 };
 
 UnAliasCommand::UnAliasCommand(const char* cmd_line,
                                map<string, string>* aliasesMap) :
         BuiltInCommand(cmd_line), aliasesMap(aliasesMap) {
     
-    char* args[COMMAND_MAX_ARGS];
-    int num_args = _parseCommandLine(cmd_line, args);
-    if (num_args == 1) {
+    if (numArgs == 1) {
         //empty command
-        perror("smash error: unalias: not enough arguments");
+        throw runtime_error("smash error: unalias: not enough arguments");
     }
     
-    for (int i = 1; i < num_args; ++i) {
-        aliasesMap->erase(args[i]);
+    for (int i = 1; i < numArgs; ++i) {
+        
+        if (aliasesMap->erase(args[i])) {
+            throw std::runtime_error("smash error: unalias: " +
+                                     string(args[i]) + " alias does not exist");
+        }
     }
-    
 }
 
 UnSetEnvCommand::UnSetEnvCommand(const char* cmdLine) :
         BuiltInCommand(cmdLine) {
-    char* args[COMMAND_MAX_ARGS];
-    int num_args = _parseCommandLine(cmdLine, args);
-    if (num_args == 1) {
-        perror("smash error: unsetenv: not enough arguments");
-    } else {
-        for (int i = 1; i < num_args; ++i) {
-            envToUnset.insert(args[i]);
-        }
+    if (numArgs == 1) {
+        throw std::runtime_error("smash error: unsetenv: not enough arguments");
     }
 }
 
 void UnSetEnvCommand::execute() {
-    // TODO: fix this
-    // Iterate over all requested variable names
-    for (const std::string& varName: this->envToUnset) {
-        
-        // The environment variable format is "VARNAME=VALUE".
-        std::string prefix = varName + "=";
-        
-        int i = 0;
-        // Locate the pointer to the variable in the global environ array.
-        while (environ[i] != nullptr) {
-            
-            // Check if the current entry starts with the target prefix.
-            if (strncmp(environ[i], prefix.c_str(), prefix.length()) == 0) {
-                
-                // --- Variable found: Perform manual shift (Deletion) ---
-                cout << "Variable found " << environ[i] << endl;
-                int j = i;
-                // Shift all subsequent pointers up by one to overwrite the found entry.
-                do {
-                    environ[j] = environ[j + 1];
-                    j++;
-                } while (environ[j] != nullptr);
-                cout << "now Variable found " << environ[i] << endl;
-                // We need to re-check the current index 'i' because it now holds the
-                // next environment variable.
-                i--;
-                break;
-            }
-            i++; // Move to the next environment entry
+    for (int j = 1; j < numArgs; j++) {
+        string varName = string(args[j]);
+        int location = checkVarExistsInProc(varName);
+        if (location < 0) {
+            throw std::runtime_error("smash error: unsetenv: " + varName
+                                     + " does not exist");
+            return;
         }
+        removeFromEnviron(varName, location);
     }
 }
+
+int UnSetEnvCommand::checkVarExistsInProc(const std::string& targetVar) {
+    std::string procPath = "/proc/self/environ";
+    ifstream stream(procPath);
+    if (!stream.is_open()) {
+        return -1;
+    }
+    string str;
+    int i = 0;
+    while (std::getline(stream, str, '\0')) {
+        if (!str.empty()) {
+            // Check if this entry starts with "targetVar="
+            //check("name4")
+            //file: name=value name2=value name3=name4
+            if (str.compare(0, targetVar.length(), targetVar) == 0
+                && str[targetVar.length()] == '=') {
+                stream.close();
+                return i;
+            }
+        }
+        i++;
+    }
+    stream.close();
+    return -1;
+}
+
+void UnSetEnvCommand::removeFromEnviron(const std::string& targetVar, int idx) {
+    while (environ[idx] != nullptr) {
+        environ[idx] = environ[idx + 1];
+        idx++;
+    }
+}
+//void UnSetEnvCommand::execute() {
+//    // TODO: fix this
+//    // Iterate over all requested variable names
+//    for (int j = 1; j < numArgs; j++) {
+//        string varName = string(args[j]);
+//
+//        // The environment variable format is "VARNAME=VALUE".
+//        std::string prefix = varName + "=";
+//
+//        int i = 0;
+//        // Locate the pointer to the variable in the global environ array.
+//        while (environ[i] != nullptr) {
+//
+//            // Check if the current entry starts with the target prefix.
+//            if (strncmp(environ[i], prefix.c_str(), prefix.length()) == 0) {
+//
+//                // --- Variable found: Perform manual shift (Deletion) ---
+//                cout << "Variable found " << environ[i] << endl;
+//                int j = i;
+//                // Shift all subsequent pointers up by one to overwrite the found entry.
+//                do {
+//                    environ[j] = environ[j + 1];
+//                    j++;
+//                } while (environ[j] != nullptr);
+//                cout << "now Variable found " << environ[i] << endl;
+//                // We need to re-check the current index 'i' because it now holds the
+//                // next environment variable.
+//                i--;
+//                break;
+//            }
+//            i++; // Move to the next environment entry
+//        }
+//    }
+//}
 
 void SysInfoCommand::execute() {
     
@@ -961,9 +957,6 @@ void PipeCommand::execute() {
 }
 
 DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
-    char* args[COMMAND_MAX_ARGS];
-    int numArgs = _parseCommandLine(cmdLine, args);
-    
     if (numArgs == 1) {
         if (getcwd(this->path, PATH_MAX) == nullptr) {
             throw std::runtime_error(
@@ -977,9 +970,6 @@ DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
         throw std::runtime_error("smash error: du: too many arguments");
     }
     
-    for (int i = 0; i < numArgs; ++i) {
-        free(args[i]);
-    }
 }
 
 #include <sys/stat.h> // for stat() and struct stat

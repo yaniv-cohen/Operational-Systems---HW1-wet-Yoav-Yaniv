@@ -17,14 +17,14 @@ using namespace std;
 
 class Command {
     char cmd_line[COMMAND_MAX_LENGTH];
-    char *args[COMMAND_MAX_ARGS];
-    int numArgs;
 public:
+    char* args[COMMAND_MAX_ARGS];
+    int numArgs;
     Command(const char* cmd_line);
     
     virtual ~Command() {
         for (int i = 0; i < numArgs; i++) {
-                free(args[i]);
+            free(args[i]);
         }
     };
     
@@ -182,10 +182,7 @@ class ChangeDirCommand : public BuiltInCommand {
 public:
     ChangeDirCommand(const char* cmdLine);
     
-    virtual ~ChangeDirCommand() {
-        if (args) {
-            free(args);
-    };
+    virtual ~ChangeDirCommand() = default;
     
     void execute() override;
 }; // done
@@ -217,8 +214,7 @@ public:
     
     void execute() override;
     
-
-}; // done
+};
 
 
 class JobsList {
@@ -242,7 +238,6 @@ public:
         
         JobEntry(const JobEntry&) = delete;
         JobEntry& operator=(const JobEntry&) = delete;
-        
         
         ~JobEntry() {};
     };
@@ -287,7 +282,6 @@ public:
     };
     
     void printJobsList() {
-        removeFinishedJobs();
         for (const auto& [id, job]: jobs) {
             std::cout << "[" << id << "] " << job.cmd->getCmdLine()
                       << std::endl;
@@ -380,9 +374,9 @@ public:
 
 class QuitCommand : public BuiltInCommand {
     JobsList* jl;
-    bool doNothing;
 public:
-    QuitCommand(const char* cmd_line, JobsList* jobsList);
+    QuitCommand(const char* cmd_line, JobsList* jobsList) : BuiltInCommand(
+            cmd_line),jl(jobsList) {};
     
     virtual ~QuitCommand() {
     }
@@ -401,11 +395,11 @@ public:
     virtual ~AliasCommand() {
     }
     
-    static bool isValidAliasName(string& s) {
+    int isValidAliasName(string& s) {
         for (char c: s) {
             if ((c < 0 || c > 9) && (c < 'a' || c > 'z') &&
                 (c < 'A' || c > 'Z') && c != '_')
-                return false;
+                return -1;
         }
         vector<string> illegals = {
                 "chprompt",
@@ -420,15 +414,21 @@ public:
                 "unalias",
                 "unsetenv",
                 "sysinfo",
+                "du",
+                "whoami",
+                "usbinfo",
                 ""
         };
         for (auto i: illegals) {
             if (s.compare(i) == 0) {
-//                cout << "illegal! " << i << endl;
-                return false;
+                return 0;
             }
         }
         return true;
+        if (aliasesMap->find(s) != aliasesMap->end()) {
+            return 0;
+        }
+        return 1;
     };
     void execute() override;
 };
@@ -452,7 +452,8 @@ public:
     
     virtual ~UnSetEnvCommand() {
     }
-    
+    int checkVarExistsInProc( const string& s );
+    void removeFromEnviron( const string& s , int idx);
     void execute() override;
 };
 
