@@ -45,8 +45,6 @@ public:
 class BuiltInCommand : public Command {
 public:
     BuiltInCommand(const char* cmd_line) : Command(cmd_line) {
-//        std::cout << "in BuiltInCommand constructor\n"
-//                  << std::endl;
     };
     
     virtual ~BuiltInCommand() = default;
@@ -178,7 +176,6 @@ public:
 class ChangeDirCommand : public BuiltInCommand {
     // TODO: Add your data members public:
     string newTargetPath;
-    char **args;
 public:
     ChangeDirCommand(const char* cmdLine);
     
@@ -351,10 +348,6 @@ public:
         // 3. Output confirmation
         cout << "signal number " << signalNumber << " was sent to pid " << pid
              << endl;
-        
-        // 4. Update job list state (for SIGKILL/SIGTERM)
-        // A robust shell would clean up the job list if SIGKILL (9) or SIGTERM (15) was sent,
-        // but typically cleanup is deferred to the removeFinishedJobs via waitpid in the main loop/signal handler.
     };
 };
 
@@ -424,7 +417,6 @@ public:
                 return 0;
             }
         }
-        return true;
         if (aliasesMap->find(s) != aliasesMap->end()) {
             return 0;
         }
@@ -446,7 +438,6 @@ public:
 };
 
 class UnSetEnvCommand : public BuiltInCommand {
-    unordered_set<string> envToUnset;
 public:
     UnSetEnvCommand(const char* cmd_line);
     
