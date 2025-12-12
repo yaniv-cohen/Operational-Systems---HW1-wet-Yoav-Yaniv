@@ -314,12 +314,12 @@ SetPromptCommand::SetPromptCommand(const char* cmdLine) : BuiltInCommand(
     } else { // ignore arguments aside from first
         setCmdLine(args[1]);
     }
-}
+} //done
 
 void SetPromptCommand::execute() {
     SmallShell& smash = SmallShell::getInstance();
     smash.setPrompt(getCmdLine());
-}
+} //done
 
 ChangeDirCommand::ChangeDirCommand(const char* cmdLine) : BuiltInCommand(
         cmdLine) {
@@ -329,8 +329,7 @@ ChangeDirCommand::ChangeDirCommand(const char* cmdLine) : BuiltInCommand(
         throw std::runtime_error("smash error: cd: too many arguments");
     } else if (numArgs == 2) {
         
-        if (strcmp("-", args[1]) == 0 &&
-            smash.getPreviousUsedPath() == "\n") {
+        if (strcmp("-", args[1]) == 0 && smash.getPreviousUsedPath() == "\n") {
             throw std::runtime_error("smash error: cd: OLDPWD not set");
         } else if (strcmp("-", args[1]) == 0) { // set prev to current
             newTargetPath = smash.getPreviousUsedPath();
@@ -533,14 +532,12 @@ void JobsList::removeFinishedJobs() {
         pid_t result = waitpid(it->second.pid, &status, WNOHANG);
         
         if (result == it->second.pid) {
-            delete it->second.cmd;
             it = jobs.erase(it);
         } else if (result == 0 || (result == -1 && errno == EINTR)) {
             ++it;
         } else if (result == -1 && errno == ECHILD) {
             // Process has been reaped by another function (unlikely but robust)
             // Clean up the map entry if the process is gone.
-            delete it->second.cmd;
             it = jobs.erase(it);
         } else {
             ++it;
@@ -548,17 +545,7 @@ void JobsList::removeFinishedJobs() {
     }
 };
 
-void JobsList::removeJobById(const int jobId) {
-    auto it = jobs.find(jobId);
-    if (it != jobs.end()) {
-        delete it->second.cmd;
-        jobs.erase(it);
-    }
-};
-
-void JobsList::addJob(Command* cmd, int pid, bool isFinished=false){
-        removeFinishedJobs();
-        
+void JobsList::addJob(Command* cmd, int pid){
         // calculate the new Job ID
         int newJobId;
         if (jobs.empty()) {
@@ -569,7 +556,8 @@ void JobsList::addJob(Command* cmd, int pid, bool isFinished=false){
         }
         
         //Insert the new job
-        jobs.insert(pair<int, JobEntry>(newJobId, JobEntry(newJobId, cmd, isFinished, pid)));
+        jobs.emplace(newJobId, JobEntry(newJobId, cmd,pid));
+//        jobs.insert(pair<int, JobEntry>(newJobId, JobEntry(newJobId, cmd, pid)));
 }
 KillCommand::KillCommand(const char* cmdLine,
                          JobsList* jobsList) : BuiltInCommand(cmdLine),

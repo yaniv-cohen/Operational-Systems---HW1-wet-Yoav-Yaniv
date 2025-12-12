@@ -19,17 +19,14 @@ using namespace std;
 class Command {
     char cmd_line[COMMAND_MAX_LENGTH];
 public:
-    char* args[COMMAND_MAX_ARGS+1] = {nullptr};
+    char* args[COMMAND_MAX_ARGS + 1];
     int numArgs;
     Command(const char* cmd_line);
     
     virtual ~Command();
     
     virtual void execute() = 0;
-    
-//     virtual void prepare();
-//     virtual void cleanup();
-    //  TODO: Add your extra methods if needed
+
     const char* getCmdLine() const {
         return cmd_line;
     }
@@ -41,22 +38,18 @@ public:
 
 class BuiltInCommand : public Command {
 public:
-    BuiltInCommand(const char* cmd_line) : Command(cmd_line) {
-    };
+    BuiltInCommand(const char* cmd_line) : Command(cmd_line) {};
     
     virtual ~BuiltInCommand() = default;
 };
 
-//
 class ExternalCommand : public Command {
 
 public:
     bool isBG;
     
     ExternalCommand(const char* cmd_line, bool isBG) : Command(cmd_line),
-                                                       isBG(isBG) {
-    };
-    bool getIsBG(){return isBG;}
+                                                       isBG(isBG) {};
     virtual ~ExternalCommand() = default;
 };
 
@@ -64,8 +57,7 @@ class SimpleExternalCommand : public ExternalCommand {
 
 public:
     SimpleExternalCommand(const char* cmd_line, bool isBG) : ExternalCommand(
-            cmd_line, isBG) {
-    };
+            cmd_line, isBG) {};
     
     virtual ~SimpleExternalCommand() = default;
     
@@ -76,17 +68,13 @@ class ComplexExternalCommand : public ExternalCommand {
 
 public:
     ComplexExternalCommand(const char* cmd_line, bool isBG) : ExternalCommand(
-            cmd_line,
-            isBG) {
-    };
+            cmd_line,isBG) {};
     
-    virtual ~ComplexExternalCommand() {
-    }
+    virtual ~ComplexExternalCommand() = default;
     
     void execute() override;
 };
 
-//
 class RedirectionCommand : public Command {
     // TODO: Add your data members
     string innerCommand;
@@ -119,6 +107,7 @@ public:
 };
 //
 #include <limits.h>
+#include <memory>
 
 class DiskUsageCommand : public Command {
     char path[PATH_MAX];
@@ -169,9 +158,9 @@ public:
 };
 
 class ChangeDirCommand : public BuiltInCommand {
-    // TODO: Add your data members public:
-    string newTargetPath;
 public:
+    string newTargetPath;
+
     ChangeDirCommand(const char* cmdLine);
     
     virtual ~ChangeDirCommand() = default;
@@ -206,24 +195,20 @@ public:
     
     void execute() override;
     
-};
-
+}; // done
 
 class JobsList {
 public:
     class JobEntry {
-        // TODO: Add your data members
     public:
         int jobId = 1;
-        Command* cmd = nullptr;
-        bool isFinished = false;
+        std::unique_ptr<Command> cmd = nullptr;
         int pid = 0;
         
         JobEntry() = default;
         
-        JobEntry(int jobId, Command* cmd, bool isFinished, int pid)
-                : jobId(jobId), cmd(cmd), isFinished(isFinished), pid(pid) {
-        }
+        JobEntry(int jobId, Command* cmd, int pid)
+                : jobId(jobId), cmd(cmd), pid(pid) {}
         
         JobEntry(JobEntry&&) = default;
         JobEntry& operator=(JobEntry&&) = default;
@@ -231,10 +216,9 @@ public:
         JobEntry(const JobEntry&) = delete;
         JobEntry& operator=(const JobEntry&) = delete;
         
-        ~JobEntry() {};
+        ~JobEntry() = default;
     };
 
-// TODO: Add your data members
     map<int, JobEntry> jobs;
 
 public:
@@ -242,17 +226,13 @@ public:
     JobsList(const JobsList&) = delete;
     JobsList& operator=(const JobsList&) = delete;
     
-    ~
+    ~JobsList() = default;
     
-    JobsList() {
-        for (auto& pair: jobs) {
-            delete pair.second.cmd;
-        }
+    void removeJobById(const int jobId){
+        jobs.erase(jobId);
     }
     
-    void removeJobById(const int jobId);
-    
-    void addJob(Command* cmd, int pid, bool isFinished ) ;
+    void addJob(Command* cmd, int pid);
     
     void printJobsList() {
         for (const auto& entry : jobs) {
@@ -269,7 +249,7 @@ public:
     JobsList::JobEntry* getLastJob() {
         return &prev(jobs.end())->second;
     };
-};
+}; //done
 
 class JobsCommand : public BuiltInCommand {
     // TODO: Add your data members
@@ -436,7 +416,7 @@ public:
         return prompt;
     }
     
-    void setPreviousUsedPathString(string previousUsed) {
+    void setPreviousUsedPathString(string &previousUsed) {
         previousUsedPath = previousUsed;
     }
     
@@ -452,7 +432,7 @@ public:
         return jobsList;
     }
     
-    pid_t getFgPid() { return fgPid; };
+    pid_t getFgPid() const { return fgPid; };
     
     void setFgPid(pid_t newPid) { fgPid = newPid; }
 

@@ -15,8 +15,7 @@ void ctrlCHandler(int sig_num) {
         if (sigOut != 0) {
             return;
         }
-        cout << "smash: process " <<
-             targetPid << "  was killed" << endl;
+        cout << "smash: process " << targetPid << " was killed" << endl;
         smash.setFgPid(-1);
     }
 }
