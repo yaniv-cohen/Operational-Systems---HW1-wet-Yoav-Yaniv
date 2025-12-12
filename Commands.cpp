@@ -128,16 +128,38 @@ string _readFile(const string& filePath) {
     if (fd == -1) {
         return ""; // Return empty string on error
     }
-
+    
     char buf[4096];
     string content;
     ssize_t bytesRead;
-
+    
     while ((bytesRead = read(fd, buf, sizeof(buf))) > 0) {
         content.append(buf, bytesRead);
     }
     close(fd);
     return content;
+}
+
+bool isPipeCommand(const string& cmd_line) {
+    bool inSingleQuote = false;
+    bool inDoubleQuote = false;
+    
+    for (unsigned int i = 0; i < cmd_line.length(); i++) {
+        char c = cmd_line[i];
+        
+        // Toggle quote state
+        if (c == '\'' && !inDoubleQuote) {
+            inSingleQuote = !inSingleQuote;
+        } else if (c == '\"' && !inSingleQuote) {
+            inDoubleQuote = !inDoubleQuote;
+        }
+        
+        // Check for pipe ONLY if not inside quotes
+        if (c == '|' && !inSingleQuote && !inDoubleQuote) {
+            return true; // Found a real pipe!
+        }
+    }
+    return false; // No active pipe found
 }
 
 // TODO: Add your implementation for classes in Commands.h
@@ -206,9 +228,8 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
 //    printf("first word: %s\n", firstWord.c_str());
     
     //PIPE
-    size_t pipe_pos = string(cmd_line).find_first_of('|');
     // Check the position directly against std::string::npos
-    if (pipe_pos != std::string::npos) {
+    if (isPipeCommand(cmd_line)) {
         return new PipeCommand(cmd_line, raw_cmd_line);
     }
 
@@ -236,7 +257,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         return new ShowPidCommand(cmd_line, raw_cmd_line);
     } // done
     else if (firstWord == "jobs") {
-        return new JobsCommand(cmd_line,raw_cmd_line, &jobsList);
+        return new JobsCommand(cmd_line, raw_cmd_line, &jobsList);
     } else if (firstWord == "sysinfo") {
         return new SysInfoCommand(cmd_line, raw_cmd_line);
     }
@@ -352,11 +373,11 @@ ChangeDirCommand::ChangeDirCommand(const char* cmdLine,
     
     auto& smash = SmallShell::getInstance();
     if (numArgs > 2) {
-        throw std::runtime_error("smash error: cd: too many arguments");
+        throw std::runtime_error("smash error: cd: too many arguments\n");
     } else if (numArgs == 2) {
         
         if (strcmp("-", args[1]) == 0 && smash.getPreviousUsedPath() == "\n") {
-            throw std::runtime_error("smash error: cd: OLDPWD not set");
+            throw std::runtime_error("smash error: cd: OLDPWD not set\n");
         } else if (strcmp("-", args[1]) == 0) { // set prev to current
             newTargetPath = smash.getPreviousUsedPath();
         } else {
@@ -418,7 +439,7 @@ void ForegroundCommand::execute() {
     // Use a reference to the JobEntry
     auto& targetJob = it->second;
     // Check if the job is running or stopped (it shouldn't be 'finished' here)
-    std::cout << (targetJob.cmd->getRawCmdLine()) << " " << targetJob.pid
+    std::cout << _trim(targetJob.cmd->getRawCmdLine()) << " " << targetJob.pid
               << std::endl;
     
     //set group leader for Ctr+C
@@ -434,8 +455,8 @@ void ForegroundCommand::execute() {
 
 void QuitCommand::execute() {
     
-    if (numArgs <= 1) {
-        return;
+    if (numArgs == 1) {
+        exit(0);
     }
     
     if (strcmp(args[1], "kill") == 0) {
@@ -447,11 +468,11 @@ void QuitCommand::execute() {
                 // Handle error, though often ignored for SIGKILL on exit
                 perror("smash error: kill failed");
             }
-            cout << it->second.pid << ": " << it->second.cmd->getCmdLine()
+            cout << it->second.pid << ": " << it->second.cmd->getRawCmdLine()
                  << endl;
         }
-        exit(0);
     }
+    exit(0);
 }
 
 void ComplexExternalCommand::execute() {
@@ -470,7 +491,7 @@ void ComplexExternalCommand::execute() {
                                   (char*) "-c",
                                   (char*) getCmdLine(), nullptr};
             execv(argv[0], argv);
-            perror("smash error: excecution failed");
+            perror("smash error: execvp failed");
             _exit(1);
         } else if (pid > 0) {
             //parent
@@ -491,7 +512,7 @@ void ComplexExternalCommand::execute() {
                             const_cast<char*>(getCmdLine()),
                             nullptr};
             execv(argv[0], argv);
-            perror("smash error: excecution failed");
+            perror("smash error: execvp failed");
             _exit(1);
         } else if (pid > 0) {
             //parent
@@ -522,7 +543,7 @@ void SimpleExternalCommand::execute() {
             signal(SIGINT, SIG_DFL);
             
             execvp(args[0], args);
-            perror("smash error: excecution failed");
+            perror("smash error: execvp failed");
             _exit(1);
         } else if (pid > 0) {
             //parent
@@ -540,7 +561,7 @@ void SimpleExternalCommand::execute() {
             //child
             setpgrp();
             execvp(args[0], args);
-            perror("smash error: excecution failed");
+            perror("smash error: execvp failed");
             _exit(1);
         } else if (pid > 0) {
             //parent
@@ -572,7 +593,7 @@ void JobsList::removeFinishedJobs() {
     }
 };
 
-void JobsList::addJob(Command* cmd, int pid){
+void JobsList::addJob(Command* cmd, int pid) {
     // calculate the new Job ID
     int newJobId;
     if (jobs.empty()) {
@@ -583,7 +604,7 @@ void JobsList::addJob(Command* cmd, int pid){
     }
     
     //Insert the new job
-    jobs.emplace(newJobId, JobEntry(newJobId, cmd,pid));
+    jobs.emplace(newJobId, JobEntry(newJobId, cmd, pid));
 //        jobs.insert(pair<int, JobEntry>(newJobId, JobEntry(newJobId, cmd, pid)));
 }
 
@@ -620,7 +641,7 @@ KillCommand::KillCommand(const char* cmdLine, const char* raw_cmd_line,
         // Convert the job ID argument to an integer
         targetJobId = std::stoi(args[2]);
     } catch (const std::exception& e) {
-        throw std::runtime_error("smash error: kill: invalid arguments");
+        throw std::runtime_error("smash error: kill: invalid arguments\n");
     }
 }
 
@@ -718,14 +739,14 @@ UnAliasCommand::UnAliasCommand(const char* cmd_line,
     
     if (numArgs == 1) {
         //empty command
-        throw runtime_error("smash error: unalias: not enough arguments");
+        throw runtime_error("smash error: unalias: not enough arguments\n");
     }
     
     for (int i = 1; i < numArgs; ++i) {
         
         if (aliasesMap->erase(args[i]) == 0) {
             throw std::runtime_error("smash error: unalias: " +
-                                     string(args[i]) + " alias does not exist");
+                                     string(args[i]) + " alias does not exist\n");
         }
     }
 }
@@ -734,7 +755,7 @@ UnSetEnvCommand::UnSetEnvCommand(const char* cmdLine,
                                  const char* raw_cmd_line) :
         BuiltInCommand(cmdLine, raw_cmd_line) {
     if (numArgs == 1) {
-        throw std::runtime_error("smash error: unsetenv: not enough arguments");
+        throw std::runtime_error("smash error: unsetenv: not enough arguments\n");
     }
 }
 
@@ -751,11 +772,11 @@ void UnSetEnvCommand::execute() {
 
 bool UnSetEnvCommand::checkVarExistsInProc(const std::string& targetVar) {
     string fileContent = _readFile("/proc/self/environ");
-    if(fileContent.empty()){
+    if (fileContent.empty()) {
         perror("smash error: open failed");
         return false;
     }
-
+    
     stringstream entryStream(fileContent);
     string entry;
     while (getline(entryStream, entry, '\0')) {
@@ -790,22 +811,22 @@ void SysInfoCommand::execute() {
     string type = _trim(_readFile("/proc/sys/kernel/ostype"));
     string hostname = _trim(_readFile("/proc/sys/kernel/hostname"));
     string release = _trim(_readFile("/proc/sys/kernel/osrelease"));
-
+    
     cout << "System: " << type << endl;
     cout << "Hostname: " << hostname << endl;
     cout << "Kernel: " << release << endl;
     cout << "Architecture: x86_64" << endl;
-
+    
     string statContent = _readFile("/proc/stat");
     if (statContent.empty()) {
         perror("smash error: open failed");
         return;
     }
-
+    
     stringstream stream(statContent);
     string line;
     long bootInfo = 0;
-
+    
     while (std::getline(stream, line)) {
         if (line.substr(0, 6) == "btime ") {
             try {
@@ -837,7 +858,7 @@ RedirectionCommand::RedirectionCommand(const char* cmdLine,
     } else if (firstArrowIdx + 1 == lastArrowIdx) {
         isAppend = true;
     } else {
-        throw std::runtime_error("smash error: invalid arguments");
+        throw std::runtime_error("smash error: invalid arguments\n");
     }
     
     innerCommand = cmdS.substr(0, firstArrowIdx);
@@ -845,67 +866,46 @@ RedirectionCommand::RedirectionCommand(const char* cmdLine,
 }
 
 void RedirectionCommand::execute() {
-    
-    pid_t pid = fork();
-    if (pid > 0) {
-//parent
-        waitpid(pid, nullptr, 0);
-    } else if (pid == 0) {
-//child
-        setpgrp();
-        int flags = O_WRONLY | O_CREAT;
-        if (isAppend) {
-            flags |= O_APPEND;
-        } else {
-            flags |= O_TRUNC;
-        }
-        int fd_out = open(outerFile.c_str(), flags, 0666);
-        if (fd_out < 0) {
-            perror("smash error: open failed");
-            _exit(1);
-        }
-
-// 3. Redirect stdout (File Descriptor 1) to the file
-        if (dup2(fd_out, 1) == -1) {
-            perror("smash error: dup2 failed");
-            close(fd_out);
-            _exit(1);
-        }
-        
-        Command* cmd = SmallShell::getInstance()
-                .CreateCommand(innerCommand.c_str());
-        
-        // Check if the command is a BuiltInCommand
-        auto* built_in_cmd = dynamic_cast<BuiltInCommand*>(cmd);
-        
-        if (built_in_cmd) {
-            // 2. Case: Built-in Command (e.g., showpid, cd, chprompt)
-            // Run the built-in command directly in the child process.
-            // Its output will be redirected via FD 1.
-            cmd->execute();
-            
-            // IMPORTANT: After the built-in command finishes, the child process must terminate.
-            delete cmd; // Clean up the Command object created by CreateCommand
-            _exit(0);   // Exit the child process!
-            
-        } else {
-            // 3. Case: External Command (or Complex Command)
-            // Use execl to replace the process image. The existing Command object
-            // (SimpleExternalCommand or ComplexExternalCommand) is not needed here;
-            // we use /bin/bash -c for guaranteed execution.
-            
-            // Clean up the Command object before exec, though exec generally cleans up memory.
-            delete cmd;
-            
-            if (execl("/bin/bash", "bash", "-c", innerCommand.c_str(),
-                      nullptr) == -1) {
-                perror("smash error: execl failed");
-                _exit(1);
-            }
-        }
+    int flags = O_WRONLY | O_CREAT;
+    if (isAppend) {
+        flags |= O_APPEND;
     } else {
-        perror("smash error: fork failed");
+        flags |= O_TRUNC;
     }
+    
+    int fd = open(outerFile.c_str(), flags, 0666);
+    if (fd < 0) {
+        perror("smash error: open failed");
+        return;
+    }
+    
+    // Save the current stdout so we can restore it later
+    int original_stdout = dup(1);
+    if (original_stdout == -1) {
+        perror("smash error: dup failed");
+        close(fd);
+        return;
+    }
+    
+    // Redirect stdout to the file
+    if (dup2(fd, 1) == -1) {
+        perror("smash error: dup2 failed");
+        close(fd);
+        close(original_stdout);
+        return;
+    }
+    
+    close(fd);
+    
+    SmallShell::getInstance().executeCommand(innerCommand.c_str());
+    
+    // Restore the original stdout (terminal)
+    if (dup2(original_stdout, 1) == -1) {
+        perror("smash error: dup2 restoring stdout failed");
+    }
+    
+    // Close the backup
+    close(original_stdout);
 }
 
 PipeCommand::PipeCommand(const char* cmdLine,
@@ -918,7 +918,7 @@ PipeCommand::PipeCommand(const char* cmdLine,
     // Determine the pipe type: '|&' or '|'
     bool is_stderr_pipe = false; // Default to false
     if (firstPipePos != std::string::npos &&
-        firstPipePos + 1 < line_str.length() && // Safety check for bounds
+        firstPipePos + 1 < line_str.length() &&
         line_str[firstPipePos + 1] == '&') {
         
         is_stderr_pipe = true;
@@ -947,7 +947,7 @@ void PipeCommand::execute() {
     }
     
     pid_t pid1 = fork(); // Fork Command 1 (Writer)
-    
+   
     if (pid1 == 0) {
         // --- CHILD 1 (Writer: command1) ---
         close(pfd[0]); // Close read end
@@ -1051,7 +1051,7 @@ DiskUsageCommand::DiskUsageCommand(const char* cmdLine,
         strncpy(this->path, args[1], PATH_MAX - 1);
         this->path[PATH_MAX - 1] = '\0'; // Ensure null termination
     } else {
-        throw std::runtime_error("smash error: du: too many arguments");
+        throw std::runtime_error("smash error: du: too many arguments\n");
     }
     
 }
@@ -1078,7 +1078,8 @@ int getKBDiskUsage(const std::string& path) {
     }
     
     // Calculate size of the current entry
-    int total_usage_kb = (st.st_size + 1023) / 1024;
+//    int total_usage_kb = (st.st_size + 1023) / 1024;
+    int total_usage_kb = st.st_blocks / 2;
     
     // If it is a directory, traverse it
     if (S_ISDIR(st.st_mode)) {
@@ -1143,28 +1144,29 @@ void WhoAmICommand::execute() {
         perror("smash error: open failed");
         return;
     }
-
+    
     //read lines from fileContent: each line = entry.
     //entry format: name:password:UID:GID:gecos:directory:shell
     stringstream lineStream(fileContent);
     string line;
-    while(getline(lineStream, line)){
+    while (getline(lineStream, line)) {
         stringstream fieldStream(line);
         vector<string> fields;
         string field;
-        while(getline(fieldStream, field, ':')) {
+        while (getline(fieldStream, field, ':')) {
             fields.push_back(field);
         }
-        if(fields.size() >= 6){
-            try{
+        if (fields.size() >= 6) {
+            try {
                 uid_t currentId = stoi(fields[2]);
-                if(currentId == userId){
+                if (currentId == userId) {
                     printf("%s\n%s\n%s\n%s\n", fields[0].c_str(),
-                           fields[2].c_str(), fields[3].c_str(),fields[5].c_str());
+                           fields[2].c_str(), fields[3].c_str(),
+                           fields[5].c_str());
                     return;
                 }
             }
-            catch (...){
+            catch (...) {
                 continue;
             }
         }
