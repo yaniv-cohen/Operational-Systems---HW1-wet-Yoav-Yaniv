@@ -346,7 +346,7 @@ void ChangeDirCommand::execute() {
     char p[PATH_MAX];
     getcwd(p, PATH_MAX);
     if (chdir(newTargetPath.c_str()) != 0) {
-        perror("smash error: cd: invalid path");
+        perror("smash error: chdir failed");
     }
     auto& smash = SmallShell::getInstance();
     smash.setPreviousUsedPathChar(p);
@@ -469,7 +469,7 @@ void ComplexExternalCommand::execute() {
             //parent
             // waitpid(pid, nullptr, 0);
 //            std::cout << "not waiting" << std::endl;
-            SmallShell::getInstance().getJobsList().addJob(this, pid, false);
+            SmallShell::getInstance().getJobsList().addJob(this, pid);
 //            std::cout << "added to joblist" << std::endl;
             SmallShell::getInstance().getJobsList().printJobsList();
             return;
@@ -517,7 +517,7 @@ void SimpleExternalCommand::execute() {
             _exit(1);
         } else if (pid > 0) {
             //parent
-            SmallShell::getInstance().getJobsList().addJob(this, pid, false);
+            SmallShell::getInstance().getJobsList().addJob(this, pid);
         } else {
             perror("smash error: fork failed");
         }
@@ -1090,16 +1090,47 @@ void DiskUsageCommand::execute() {
 WhoAmICommand::WhoAmICommand(const char* cmdLine) : Command(cmdLine) {
 // 1. Get the real user ID and group ID
     userId = geteuid();
-    struct passwd* data = getpwuid(userId);
-    if (data == nullptr) {
-        perror("Smash getpwuid failed");
-    }
-    strcpy(username, data->pw_name);
-    groupId = data->pw_uid;
-    strcpy(homeDir, data->pw_dir);
+    groupId = getegid();
 }
 
 void WhoAmICommand::execute() {
-    printf("%ld\n%ld\n%s%s\n", (long) userId,
+    //read entirety of passwd into filecontent
+    int fd = open("/etc/passwd", O_RDONLY);
+    if(fd == -1){
+        perror("smash error: open failed");
+        return;
+    }
+    char buf[4096];
+    string fileContent;
+    ssize_t bytesRead;
+    while((bytesRead = read(fd, buf, sizeof(buf))) > 0){
+        fileContent.append(buf, bytesRead);
+    }
+    close(fd);
+
+    //read lines from fileContent: each line = entry
+    //entry format: name:password:UID:GID:gecos:directory:shell
+    stringstream lineStream(fileContent);
+    string line;
+    while(getline(lineStream, line)){
+        stringstream fieldStream(line);
+        vector<string> fields;
+        string field;
+        while(getline(fieldStream, field, ':')){
+            fields.push_back(field);
+        }
+        try{
+
+        }
+        if(fields.size() == 6){
+
+        }
+
+
+
+    }
+
+
+    printf("%ld\n%ld\n%s %s\n", (long) userId,
            (long) groupId, username, homeDir);
 }

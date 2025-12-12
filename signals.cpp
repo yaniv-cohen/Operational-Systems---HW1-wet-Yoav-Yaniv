@@ -10,7 +10,7 @@ void ctrlCHandler(int sig_num) {
     auto& smash = SmallShell::getInstance();
     pid_t targetPid = smash.getFgPid();
     if (targetPid != -1) {
-        cout << "smash: got ctrl-C " << endl;
+        cout << "smash: got ctrl-C" << endl;
         int sigOut = kill(targetPid, SIGKILL);
         if (sigOut != 0) {
             return;

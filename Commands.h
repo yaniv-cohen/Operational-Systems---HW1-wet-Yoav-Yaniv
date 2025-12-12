@@ -121,10 +121,8 @@ public:
 };
 
 class WhoAmICommand : public Command {
-    char username[PATH_MAX];
     uid_t userId;
     gid_t groupId;
-    char homeDir[PATH_MAX];
 public:
     WhoAmICommand(const char* cmd_line);
     
@@ -236,7 +234,7 @@ public:
     
     void printJobsList() {
         for (const auto& entry : jobs) {
-            cout << "[" << entry.second.jobId << "] " << entry.second.cmd->getCmdLine() << " : " << entry.second.pid << " ";
+            cout << "[" << entry.second.jobId << "] " << entry.second.cmd->getCmdLine() << endl;
         }
     };
     
