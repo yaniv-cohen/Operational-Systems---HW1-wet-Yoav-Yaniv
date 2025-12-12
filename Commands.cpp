@@ -123,6 +123,23 @@ void _removeBackgroundSign(char* cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
+string _readFile(const string& filePath) {
+    int fd = open(filePath.c_str(), O_RDONLY);
+    if (fd == -1) {
+        return ""; // Return empty string on error
+    }
+
+    char buf[4096];
+    string content;
+    ssize_t bytesRead;
+
+    while ((bytesRead = read(fd, buf, sizeof(buf))) > 0) {
+        content.append(buf, bytesRead);
+    }
+    close(fd);
+    return content;
+}
+
 // TODO: Add your implementation for classes in Commands.h
 
 SmallShell::SmallShell() = default;
@@ -720,17 +737,11 @@ void UnSetEnvCommand::execute() {
 }
 
 bool UnSetEnvCommand::checkVarExistsInProc(const std::string& targetVar) {
-    int fd = open("/proc/self/environ", O_RDONLY);
-    if (fd == -1) {
+    string fileContent = _readFile("/proc/self/environ");
+    if(fileContent.empty()){
+        perror("smash error: open failed");
         return false;
     }
-    char buf[4096];
-    std::string fileContent;
-    ssize_t bytesRead;
-    while ((bytesRead = read(fd, buf, sizeof(buf))) > 0) {
-        fileContent.append(buf, bytesRead);
-    }
-    close(fd);
 
     stringstream entryStream(fileContent);
     string entry;
@@ -739,8 +750,8 @@ bool UnSetEnvCommand::checkVarExistsInProc(const std::string& targetVar) {
             entry[targetVar.length()] == '=') {
             return true;
         }
-        return false;
     }
+    return false;
 }
 
 void UnSetEnvCommand::removeFromEnviron(const std::string& targetVar) {
@@ -763,56 +774,43 @@ void UnSetEnvCommand::removeFromEnviron(const std::string& targetVar) {
 };
 
 void SysInfoCommand::execute() {
-    
-    struct utsname name;
-    
-    if (uname(&name) == 0) {
-        printf("System: %s\n", name.sysname);
-        printf("Hostname: %s\n", name.nodename);
-        printf("Kernel: %s ", name.release);
-        for (int i = 0; i < PATH_MAX; ++i) {
-            if (name.version[i] == ' ' ||
-                name.version[i] == '\n' ||
-                name.version[i] == '\0') {
-                cout << name.version[i];
-            } else {
-                cout << endl;
-                break;
-            }
-        }
-        printf("Architecture: %s\n", name.machine);
-    } else {
-        // Use perror to print a descriptive error message if uname fails
-        perror("Error calling uname");
-        return; // Return a non-zero exit code to signal failure
-    }
-    
-    ifstream stat_file("/proc/stat");
-    string line;
-    long boot_time_sec = 0;
+    string type = _trim(_readFile("/proc/sys/kernel/ostype"));
+    string hostname = _trim(_readFile("/proc/sys/kernel/hostname"));
+    string release = _trim(_readFile("/proc/sys/kernel/osrelease"));
 
-// Search for the "btime" line in /proc/stat
-    while (std::getline(stat_file, line)) {
+    cout << "System: " << type << endl;
+    cout << "Hostname: " << hostname << endl;
+    cout << "Kernel: " << release << endl;
+    cout << "Architecture: x86_64" << endl;
+
+    string statContent = _readFile("/proc/stat");
+    if (statContent.empty()) {
+        perror("smash error: open failed");
+        return;
+    }
+
+    stringstream stream(statContent);
+    string line;
+    long bootInfo = 0;
+
+    while (std::getline(stream, line)) {
         if (line.substr(0, 6) == "btime ") {
-            std::stringstream ss(line.substr(6));
-            ss >> boot_time_sec;
+            try {
+                bootInfo = stol(line.substr(6));
+            } catch (...) {
+                bootInfo = 0;
+            }
             break;
         }
     }
-    
-    if (boot_time_sec == 0) {
-        perror("Error reading file");
+    if (bootInfo > 0) {
+        time_t bootTime = bootInfo;
+        struct tm* timeInfo = std::localtime(&bootTime);
+        char timeBuffer[80];
+        std::strftime(timeBuffer, 80, "%Y-%m-%d %H:%M:%S", timeInfo);
+        cout << "Boot Time: " << timeBuffer << endl;
+        return;
     }
-
-// Convert seconds since epoch to a formatted string
-    std::time_t boot_time_t = boot_time_sec;
-    struct tm* tm_info = std::localtime(&boot_time_t);
-    
-    char buffer[20];
-// Format: YYYY-MM-DD HH:MM:SS
-    std::strftime(buffer, 20, "%Y-%m-%d %H:%M:%S", tm_info);
-    
-    std::cout << "Boot Time: " << std::string(buffer) << std::endl;
 }
 
 RedirectionCommand::RedirectionCommand(const char* cmdLine) : Command(cmdLine) {
@@ -1040,7 +1038,6 @@ DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
 }
 
 #include <sys/stat.h> // for stat() and struct stat
-#include <dirent.h>  // for opendir(), readdir(), closedir()
 
 int getKBDiskUsage(const std::string& path) {
     struct stat st;
@@ -1085,21 +1082,14 @@ void DiskUsageCommand::execute() {
 }
 
 void WhoAmICommand::execute() {
-    // 1. Get the real user ID and group ID
+    // 1. Get the target user ID
     uid_t userId = geteuid();
-    //read entirety of passwd into filecontent
-    int fd = open("/etc/passwd", O_RDONLY);
-    if(fd == -1){
+    //read entirety of passwd into fileContent
+    string fileContent = _readFile("/etc/passwd");
+    if (fileContent.empty()) {
         perror("smash error: open failed");
         return;
     }
-    char buf[4096];
-    string fileContent;
-    ssize_t bytesRead;
-    while((bytesRead = read(fd, buf, sizeof(buf))) > 0){
-        fileContent.append(buf, bytesRead);
-    }
-    close(fd);
 
     //read lines from fileContent: each line = entry.
     //entry format: name:password:UID:GID:gecos:directory:shell
