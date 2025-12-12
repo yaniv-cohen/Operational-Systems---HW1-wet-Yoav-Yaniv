@@ -360,7 +360,7 @@ public:
     
     virtual ~UnSetEnvCommand() {
     }
-    int checkVarExistsInProc( const string& s );
+    bool checkVarExistsInProc( const string& s );
     void removeFromEnviron( const string& s );
     void execute() override;
 };

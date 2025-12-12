@@ -244,7 +244,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     } else if (firstWord == "du") {
         return new DiskUsageCommand(cmd_line);
     } else if (firstWord == "whoami") {
-        return new WhoAmICommand(nullptr, cmd_line);
+        return new WhoAmICommand(cmd_line);
     }
         // not built in command
         // not special command
@@ -709,8 +709,7 @@ UnSetEnvCommand::UnSetEnvCommand(const char* cmdLine) :
 void UnSetEnvCommand::execute() {
     for (int j = 1; j < numArgs; j++) {
         string varName = string(args[j]);
-        int location = checkVarExistsInProc(varName);
-        if (location < 0) {
+        if (!checkVarExistsInProc(varName)) {
             throw std::runtime_error("smash error: unsetenv: " + varName
                                      + " does not exist");
         }
@@ -718,29 +717,28 @@ void UnSetEnvCommand::execute() {
     }
 }
 
-int UnSetEnvCommand::checkVarExistsInProc(const std::string& targetVar) {
-    std::string procPath = "/proc/self/environ";
-    ifstream stream(procPath);
-    if (!stream.is_open()) {
-        return -1;
+bool UnSetEnvCommand::checkVarExistsInProc(const std::string& targetVar) {
+    int fd = open("/proc/self/environ", O_RDONLY);
+    if (fd == -1) {
+        return false;
     }
-    string str;
-    int i = 0;
-    while (std::getline(stream, str, '\0')) {
-        if (!str.empty()) {
-            // Check if this entry starts with "targetVar="
-            //check("name4")
-            //file: name=value name2=value name3=name4
-            if (str.compare(0, targetVar.length(), targetVar) == 0
-                && str[targetVar.length()] == '=') {
-                stream.close();
-                return i;
-            }
+    char buf[4096];
+    std::string fileContent;
+    ssize_t bytesRead;
+    while ((bytesRead = read(fd, buf, sizeof(buf))) > 0) {
+        fileContent.append(buf, bytesRead);
+    }
+    close(fd);
+
+    stringstream entryStream(fileContent);
+    string entry;
+    while (getline(entryStream, entry, '\0')) {
+        if (entry.compare(0, targetVar.length(), targetVar) == 0 &&
+            entry[targetVar.length()] == '=') {
+            return true;
         }
-        i++;
+        return false;
     }
-    stream.close();
-    return -1;
 }
 
 void UnSetEnvCommand::removeFromEnviron(const std::string& targetVar) {
@@ -1114,7 +1112,7 @@ void WhoAmICommand::execute() {
         }
         if(fields.size() >= 6){
             try{
-                int currentId = stoi(fields[2]);
+                uid_t currentId = stoi(fields[2]);
                 if(currentId == userId){
                     printf("%s\n%s\n%s\n%s\n", fields[0].c_str(),
                            fields[2].c_str(), fields[3].c_str(),fields[5].c_str());
