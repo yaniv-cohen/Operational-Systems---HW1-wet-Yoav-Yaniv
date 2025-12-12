@@ -209,7 +209,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     size_t pipe_pos = string(cmd_line).find_first_of('|');
     // Check the position directly against std::string::npos
     if (pipe_pos != std::string::npos) {
-        return new PipeCommand(cmd_line);
+        return new PipeCommand(cmd_line, raw_cmd_line);
     }
 
 // Find the position of the redirection character
@@ -1084,11 +1084,6 @@ int getKBDiskUsage(const std::string& path) {
             return total_usage_kb;
         }
         
-        struct dirent* entry;
-        while ((entry = readdir(dir)) != nullptr) {
-            std::string name = entry->d_name;
-            if (name == "." || name == "..") {
-                continue;
         char buf[4096];
         int nread;
         
