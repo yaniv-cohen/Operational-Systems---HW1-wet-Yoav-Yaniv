@@ -244,7 +244,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     } else if (firstWord == "du") {
         return new DiskUsageCommand(cmd_line);
     } else if (firstWord == "whoami") {
-        return new WhoAmICommand(nullptr, cmd_line);
+        return new WhoAmICommand(cmd_line);
     }
         // not built in command
         // not special command
@@ -460,6 +460,7 @@ void ComplexExternalCommand::execute() {
         int pid = fork();
         if (pid == 0) {
             //child
+            setpgrp();
             char* argv[] = {(char *)"/bin/bash", (char *)"-c", const_cast<char*>(getCmdLine()),
                             nullptr};
             execv(argv[0], argv);
@@ -512,6 +513,7 @@ void SimpleExternalCommand::execute() {
         int pid = fork();
         if (pid == 0) {
             //child
+            setpgrp();
             execvp(args[0], args);
             perror("smash error: excecution failed");
             _exit(1);
@@ -839,7 +841,7 @@ void RedirectionCommand::execute() {
         waitpid(pid, nullptr, 0);
     } else if (pid == 0) {
 //child
-        
+        setpgrp();
         int flags = O_WRONLY | O_CREAT;
         if (isAppend) {
             flags |= O_APPEND;
