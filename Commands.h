@@ -18,17 +18,21 @@ using namespace std;
 
 class Command {
     char cmd_line[COMMAND_MAX_LENGTH];
+    char raw_cmd_line[COMMAND_MAX_LENGTH];
 public:
     char* args[COMMAND_MAX_ARGS + 1];
     int numArgs;
-    Command(const char* cmd_line);
+    Command(const char* cmd_line,const char*  raw_cmd_line);
     
     virtual ~Command();
     
     virtual void execute() = 0;
-
+    
     const char* getCmdLine() const {
         return cmd_line;
+    }
+    const char* getRawCmdLine() const {
+        return raw_cmd_line;
     }
     
     void setCmdLine(char* newLine) {
@@ -38,7 +42,9 @@ public:
 
 class BuiltInCommand : public Command {
 public:
-    BuiltInCommand(const char* cmd_line) : Command(cmd_line) {};
+    BuiltInCommand(const char* cmd_line,
+                   const char* raw_cmd_line) :
+                   Command(cmd_line, raw_cmd_line) {};
     
     virtual ~BuiltInCommand() = default;
 };
@@ -48,7 +54,7 @@ class ExternalCommand : public Command {
 public:
     bool isBG;
     
-    ExternalCommand(const char* cmd_line, bool isBG) : Command(cmd_line),
+    ExternalCommand(const char* cmd_line, const char* raw_cmd_line, bool isBG) : Command(cmd_line,raw_cmd_line),
                                                        isBG(isBG) {};
     virtual ~ExternalCommand() = default;
 };
@@ -56,8 +62,8 @@ public:
 class SimpleExternalCommand : public ExternalCommand {
 
 public:
-    SimpleExternalCommand(const char* cmd_line, bool isBG) : ExternalCommand(
-            cmd_line, isBG) {};
+    SimpleExternalCommand(const char* cmd_line,const char* raw_cmd_line, bool isBG) : ExternalCommand(
+            cmd_line, raw_cmd_line, isBG) {};
     
     virtual ~SimpleExternalCommand() = default;
     
@@ -67,8 +73,8 @@ public:
 class ComplexExternalCommand : public ExternalCommand {
 
 public:
-    ComplexExternalCommand(const char* cmd_line, bool isBG) : ExternalCommand(
-            cmd_line,isBG) {};
+    ComplexExternalCommand(const char* cmd_line,const char* raw_cmd_line, bool isBG) : ExternalCommand(
+            cmd_line,raw_cmd_line, isBG) {};
     
     virtual ~ComplexExternalCommand() = default;
     
@@ -82,7 +88,8 @@ class RedirectionCommand : public Command {
     bool isAppend;
 
 public:
-    explicit RedirectionCommand(const char* cmdLine);
+    explicit RedirectionCommand(const char* cmdLine,
+                                const char* raw_cmd_line);
     
     virtual ~RedirectionCommand() {
     }
@@ -98,7 +105,7 @@ class PipeCommand : public Command {
     string command2Line;
     bool isNormalPipe;
 public:
-    PipeCommand(const char* cmd_line);
+    PipeCommand(const char* cmd_line, const char* raw_cmd_line);
     
     virtual ~PipeCommand() {
     }
@@ -112,7 +119,7 @@ public:
 class DiskUsageCommand : public Command {
     char path[PATH_MAX];
 public:
-    DiskUsageCommand(const char* cmd_line);
+    DiskUsageCommand(const char* cmd_line, const char* raw_cmd_line);
     
     virtual ~DiskUsageCommand() {
     }
@@ -123,7 +130,7 @@ public:
 class WhoAmICommand : public Command {
 
 public:
-    WhoAmICommand(const char *cmdLine) : Command(cmdLine){};
+    WhoAmICommand(const char* cmdLine, const char* raw_cmd_line) : Command(cmdLine, raw_cmd_line) {};
     
     virtual ~WhoAmICommand() {
     };
@@ -145,20 +152,12 @@ public:
 //    void execute() override;
 //};
 
-class DoNothingCommand : public BuiltInCommand {
-public:
-    DoNothingCommand(const char* cmdLine) : BuiltInCommand(cmdLine) {};
-    
-    virtual ~DoNothingCommand() = default;
-    
-    void execute() override {};
-};
 
 class ChangeDirCommand : public BuiltInCommand {
 public:
     string newTargetPath;
-
-    ChangeDirCommand(const char* cmdLine);
+    
+    ChangeDirCommand(const char* cmdLine, const char* raw_cmd_line);
     
     virtual ~ChangeDirCommand() = default;
     
@@ -167,7 +166,7 @@ public:
 
 class GetCurrDirCommand : public BuiltInCommand {
 public:
-    GetCurrDirCommand(const char* cmdLine) : BuiltInCommand(cmdLine) {};
+    GetCurrDirCommand(const char* cmdLine,const char* raw_cmd_line) : BuiltInCommand(cmdLine, raw_cmd_line) {};
     
     virtual ~GetCurrDirCommand() = default;
     
@@ -176,7 +175,7 @@ public:
 
 class ShowPidCommand : public BuiltInCommand {
 public:
-    ShowPidCommand(const char* cmdLine) : BuiltInCommand(cmdLine) {};
+    ShowPidCommand(const char* cmdLine, const char* raw_cmd_line) : BuiltInCommand(cmdLine, raw_cmd_line) {};
     
     virtual ~ShowPidCommand() = default;
     
@@ -188,7 +187,7 @@ public:
 class SetPromptCommand : public BuiltInCommand {
 
 public:
-    SetPromptCommand(const char* cmdLine);
+    SetPromptCommand(const char* cmdLine, const char* raw_cmd_line);
     
     void execute() override;
     
@@ -215,7 +214,7 @@ public:
         
         ~JobEntry() = default;
     };
-
+    
     map<int, JobEntry> jobs;
 
 public:
@@ -225,15 +224,16 @@ public:
     
     ~JobsList() = default;
     
-    void removeJobById(const int jobId){
+    void removeJobById(const int jobId) {
         jobs.erase(jobId);
     }
     
     void addJob(Command* cmd, int pid);
     
     void printJobsList() {
-        for (const auto& entry : jobs) {
-            cout << "[" << entry.second.jobId << "] " << entry.second.cmd->getCmdLine() << endl;
+        for (const auto& entry: jobs) {
+            cout << "[" << entry.second.jobId << "] "
+                 << entry.second.cmd->getRawCmdLine() << endl;
         }
     };
     
@@ -253,7 +253,7 @@ class JobsCommand : public BuiltInCommand {
     JobsList* jobsList;
 
 public:
-    JobsCommand(const char* cmdLine, JobsList* jobs) : BuiltInCommand(cmdLine),
+    JobsCommand(const char* cmdLine, const char* raw_cmd_line, JobsList* jobs) : BuiltInCommand(cmdLine, raw_cmd_line),
                                                        jobsList(jobs) {};
     
     virtual ~JobsCommand() = default;
@@ -269,7 +269,7 @@ class KillCommand : public BuiltInCommand {
     int signalNumber;
     JobsList* jobsList;
 public:
-    KillCommand(const char* cmdLine, JobsList* jobsList);
+    KillCommand(const char* cmdLine, const char* raw_cmd_line, JobsList* jobsList);
     
     virtual ~KillCommand() {
     };
@@ -283,7 +283,7 @@ public:
             // This check must happen AFTER successful parsing
             throw runtime_error(
                     "smash error: kill: job-id " + std::to_string(targetJobId) +
-                    " does not exist");
+                    " does not exist\n");
         }
         
         pid_t pid = targetJob->pid;
@@ -307,7 +307,7 @@ class ForegroundCommand : public BuiltInCommand {
     JobsList* jobsList;
 
 public:
-    ForegroundCommand(const char* cmd_line, JobsList* jobsList);
+    ForegroundCommand(const char* cmd_line,const char* raw_cmd_line, JobsList* jobsList);
     
     virtual ~ForegroundCommand() {
     }
@@ -318,8 +318,8 @@ public:
 class QuitCommand : public BuiltInCommand {
     JobsList* jl;
 public:
-    QuitCommand(const char* cmd_line, JobsList* jobsList) : BuiltInCommand(
-            cmd_line),jl(jobsList) {};
+    QuitCommand(const char* cmd_line,const char* raw_cmd_line, JobsList* jobsList) : BuiltInCommand(
+            cmd_line, raw_cmd_line), jl(jobsList) {};
     
     virtual ~QuitCommand() {
     }
@@ -333,7 +333,7 @@ class AliasCommand : public BuiltInCommand {
     string newAliasCommand;
     bool emptyAlias;
 public:
-    AliasCommand(const char* cmd_line, map<string, string>* aliasesMap);
+    AliasCommand(const char* cmd_line,const char* raw_cmd_line, map<string, string>* aliasesMap);
     
     virtual ~AliasCommand() {
     }
@@ -346,7 +346,8 @@ public:
 class UnAliasCommand : public BuiltInCommand {
     map<string, string>* aliasesMap;
 public:
-    UnAliasCommand(const char* cmd_line, map<string, string>* aliasesMap);
+    UnAliasCommand(const char* cmd_line,const char* raw_cmd_line
+                   , map<string, string>* aliasesMap);
     
     virtual ~UnAliasCommand() {
     }
@@ -356,19 +357,21 @@ public:
 
 class UnSetEnvCommand : public BuiltInCommand {
 public:
-    UnSetEnvCommand(const char* cmd_line);
+    UnSetEnvCommand(const char* cmd_line,const char* raw_cmd_line);
     
     virtual ~UnSetEnvCommand() {
     }
-    bool checkVarExistsInProc( const string& s );
-    void removeFromEnviron( const string& s );
+    
+    bool checkVarExistsInProc(const string& s);
+    void removeFromEnviron(const string& s);
     void execute() override;
 };
 
 //
 class SysInfoCommand : public BuiltInCommand {
 public:
-    SysInfoCommand(const char* cmdLine) : BuiltInCommand(cmdLine) {};
+    SysInfoCommand(const char* cmdLine,const char* raw_cmd_line) :
+    BuiltInCommand(cmdLine, raw_cmd_line) {};
     
     virtual ~SysInfoCommand() {
     }
@@ -386,6 +389,7 @@ private:
     map<string, string> aliases;
     
     pid_t fgPid = -1;
+    int fgJobId = -1; // -1 => no FG, -2 => maxJobs +1
     
     SmallShell();
 
@@ -413,7 +417,7 @@ public:
         return prompt;
     }
     
-    void setPreviousUsedPathString(string &previousUsed) {
+    void setPreviousUsedPathString(string& previousUsed) {
         previousUsedPath = previousUsed;
     }
     
@@ -431,9 +435,22 @@ public:
     
     pid_t getFgPid() const { return fgPid; };
     
-    void setFgPid(pid_t newPid) { fgPid = newPid; }
-
-    static bool isBuiltinCommand(const string &s);
+    pid_t getFgJobId() const {
+        if(fgJobId == -2 ){
+            if(jobsList.jobs.empty()){
+                return 1;
+            }
+            return jobsList.jobs.begin()->first +1;
+        }
+        return fgJobId;
+    };
+    
+    void setFgPid(pid_t newPid, int newFgJobId) {
+        fgPid = newPid;
+        fgJobId = newFgJobId;
+    }
+    
+    static bool isBuiltinCommand(const string& s);
 };
 
 #endif // SMASH_COMMAND_H_

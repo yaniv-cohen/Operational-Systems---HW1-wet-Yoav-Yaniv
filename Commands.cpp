@@ -156,8 +156,11 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     
     // 2. Create the primary mutable command line buffer.
     char cmd_line[COMMAND_MAX_LENGTH];
+    char raw_cmd_line[COMMAND_MAX_LENGTH];
     // Copy the original raw input into the mutable buffer.
     strncpy(cmd_line, cmd_line_raw, COMMAND_MAX_LENGTH - 1);
+    strncpy(raw_cmd_line, cmd_line_raw, COMMAND_MAX_LENGTH - 1);
+    
     cmd_line[COMMAND_MAX_LENGTH - 1] = '\0';
     
     // 3. Trim the mutable string and find the first word.
@@ -218,7 +221,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         // Optional: Add logic here to ensure it's not inside quotes if required by spec.
         
         // For now, assume a found '>' means redirection must be handled
-        return new RedirectionCommand(cmd_line);
+        return new RedirectionCommand(cmd_line, raw_cmd_line);
     }
 
 
@@ -227,10 +230,10 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     // --- Remainder of Command Identification Logic ---
     // single word commands
     if (firstWord == "pwd") {
-        return new GetCurrDirCommand(cmd_line);
+        return new GetCurrDirCommand(cmd_line, raw_cmd_line);
     } // done
     else if (firstWord == "showpid") {
-        return new ShowPidCommand(cmd_line);
+        return new ShowPidCommand(cmd_line, raw_cmd_line);
     } // done
     else if (firstWord == "jobs") {
         return new JobsCommand(cmd_line, &jobsList);
@@ -247,21 +250,21 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     } // done
     
     else if (firstWord == "fg") {
-        return new ForegroundCommand(cmd_line, &this->jobsList);
+        return new ForegroundCommand(cmd_line, raw_cmd_line, &this->jobsList);
     } else if (firstWord == "quit") {
-        return new QuitCommand(cmd_line, &this->jobsList);
+        return new QuitCommand(cmd_line, raw_cmd_line, &this->jobsList);
     } else if (firstWord == "kill") {
-        return new KillCommand(cmd_line, &this->jobsList);
+        return new KillCommand(cmd_line, raw_cmd_line, &this->jobsList);
     } else if (firstWord == "alias") {
-        return new AliasCommand(cmd_line, &aliases);
+        return new AliasCommand(cmd_line, raw_cmd_line, &aliases);
     } else if (firstWord == "unalias") {
-        return new UnAliasCommand(cmd_line, &aliases);
+        return new UnAliasCommand(cmd_line, raw_cmd_line, &aliases);
     } else if (firstWord == "unsetenv") {
-        return new UnSetEnvCommand(cmd_line);
+        return new UnSetEnvCommand(cmd_line, raw_cmd_line);
     } else if (firstWord == "du") {
-        return new DiskUsageCommand(cmd_line);
+        return new DiskUsageCommand(cmd_line, raw_cmd_line);
     } else if (firstWord == "whoami") {
-        return new WhoAmICommand(cmd_line);
+        return new WhoAmICommand(cmd_line, raw_cmd_line);
     }
         // not built in command
         // not special command
@@ -271,23 +274,26 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         if (string(cmd_line).find("*") == string::npos &&
             string(cmd_line).find("?") == string::npos) {
             
-            return new SimpleExternalCommand(cmd_line, isBackground);
+            return new SimpleExternalCommand(cmd_line, raw_cmd_line,
+                                             isBackground);
         } else {
             
-            return new ComplexExternalCommand(cmd_line, isBackground);
+            return new ComplexExternalCommand(cmd_line, raw_cmd_line,
+                                              isBackground);
         }
     }
     return nullptr;
 }
 
-Command::Command(const char* cmd_line) {
+Command::Command(const char* cmd_line, const char* raw_cmd_line) {
     strcpy(this->cmd_line, cmd_line);
+    strcpy(this->raw_cmd_line, raw_cmd_line);
     memset(args, 0, sizeof(args));
     numArgs = _parseCommandLine(cmd_line, args);
 };
 
 Command::~Command() {
-    for (int i = 0; i < COMMAND_MAX_ARGS+1; i++) {
+    for (int i = 0; i < COMMAND_MAX_ARGS + 1; i++) {
         if (args[i] != nullptr) {
             free(args[i]);
             args[i] = nullptr;
@@ -323,8 +329,10 @@ void SmallShell::executeCommand(const char* cmd_line) {
     }
 }
 
-SetPromptCommand::SetPromptCommand(const char* cmdLine) : BuiltInCommand(
-        cmdLine) {
+SetPromptCommand::SetPromptCommand(const char* cmdLine,
+                                   const char* raw_cmd_line) :
+        BuiltInCommand(
+                cmdLine, raw_cmd_line) {
     if (numArgs == 1) { // no arguments (just command)
         char name[] = "smash";
         setCmdLine(name);
@@ -354,8 +362,6 @@ ChangeDirCommand::ChangeDirCommand(const char* cmdLine) : BuiltInCommand(
             newTargetPath = args[1];
         }
         
-
-
     }
 }
 
@@ -369,14 +375,16 @@ void ChangeDirCommand::execute() {
     smash.setPreviousUsedPathChar(p);
 }
 
-ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList* jobsList)
-        : BuiltInCommand(cmd_line), jobsList(jobsList) {
+ForegroundCommand::ForegroundCommand(const char* cmd_line,
+                                     const char* raw_cmd_line,
+                                     JobsList* jobsList)
+        : BuiltInCommand(cmd_line, raw_cmd_line), jobsList(jobsList) {
     targetJobId = -1;
     if (numArgs == 1) { // no arguments - use the last job
         // Check if the list is empty before attempting to access the last job
         if (jobsList->jobs
                 .empty()) { // You must implement an isEmpty or similar check
-            throw runtime_error("smash error: fg: jobs list is empty");
+            throw runtime_error("smash error: fg: jobs list is empty\n");
         } else {
             targetJobId = jobsList->getLastJob()->jobId;
         }
@@ -386,7 +394,7 @@ ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList* jobsList)
             // Safety check for integer conversion
             targetJobId = std::stoi(args[1]);
         } catch (const std::exception& e) {
-            throw runtime_error("smash error: fg: invalid arguments");
+            throw runtime_error("smash error: fg: invalid arguments\n");
         }
         
     } else {
@@ -401,23 +409,23 @@ void ForegroundCommand::execute() {
     
     if (it == jobsList->jobs.end()) {
         //no such id
-        throw std::runtime_error("smash error: fg: "
+        throw std::runtime_error("smash error: fg: job-id "
                                  + to_string(targetJobId) +
-                                 " does not exist");
+                                 " does not exist\n");
     }
     
     // Use a reference to the JobEntry
     auto& targetJob = it->second;
     // Check if the job is running or stopped (it shouldn't be 'finished' here)
-    std::cout << (targetJob.cmd->getCmdLine()) << " " << targetJob.pid
+    std::cout << (targetJob.cmd->getRawCmdLine()) << " " << targetJob.pid
               << std::endl;
     
     //set group leader for Ctr+C
     auto& smash = SmallShell::getInstance();
-    smash.setFgPid(targetJob.pid);
+    smash.setFgPid(targetJob.pid, targetJob.jobId);
     // Wait for the foreground process to finish
     waitpid(targetJob.pid, nullptr, 0);
-    smash.setFgPid(-1);
+    smash.setFgPid(-1, -1);
     
     // Remove the job from the list after it finishes
     jobsList->removeJobById(targetJob.jobId);
@@ -432,7 +440,6 @@ void QuitCommand::execute() {
     if (strcmp(args[1], "kill") == 0) {
         cout << "smash: sending SIGKILL signal to " << jl->jobs.size()
              << " jobs:" << endl;
- 
         for (auto it = jl->jobs.begin();
              it != jl->jobs.end(); it++) {
             if (kill(it->second.pid, 9) == -1) {
@@ -565,25 +572,27 @@ void JobsList::removeFinishedJobs() {
 };
 
 void JobsList::addJob(Command* cmd, int pid){
-        // calculate the new Job ID
-        int newJobId;
-        if (jobs.empty()) {
-            newJobId = 1;
-        } else {
-            // jobs.rbegin() gives an iterator to the last element (highest ID)
-            newJobId = jobs.rbegin()->first + 1;
-        }
-        
-        //Insert the new job
-        jobs.emplace(newJobId, JobEntry(newJobId, cmd,pid));
+    // calculate the new Job ID
+    int newJobId;
+    if (jobs.empty()) {
+        newJobId = 1;
+    } else {
+        // jobs.rbegin() gives an iterator to the last element (highest ID)
+        newJobId = jobs.rbegin()->first + 1;
+    }
+    
+    //Insert the new job
+    jobs.emplace(newJobId, JobEntry(newJobId, cmd,pid));
 //        jobs.insert(pair<int, JobEntry>(newJobId, JobEntry(newJobId, cmd, pid)));
 }
-KillCommand::KillCommand(const char* cmdLine,
-                         JobsList* jobsList) : BuiltInCommand(cmdLine),
+
+KillCommand::KillCommand(const char* cmdLine, const char* raw_cmd_line,
+                         JobsList* jobsList) : BuiltInCommand(cmdLine,
+                                                              raw_cmd_line),
                                                jobsList(jobsList) {
     
     if (numArgs != 3) {
-        throw runtime_error("smash error: kill: invalid arguments");
+        throw runtime_error("smash error: kill: invalid arguments\n");
     }
     
     targetJobId = -1;
@@ -591,7 +600,7 @@ KillCommand::KillCommand(const char* cmdLine,
     
     // Signal Number Parsing
     if (stoi(args[1]) >= 0 || args[1][0] != '-') {
-        throw runtime_error("smash error: kill: invalid arguments");
+        throw runtime_error("smash error: kill: invalid arguments\n");
     }
     
     // Extract the signal number (the string after '-')
@@ -614,10 +623,11 @@ KillCommand::KillCommand(const char* cmdLine,
     }
 }
 
-AliasCommand::AliasCommand(const char* cmdLine,
-                           map<string, string>* aliasesMap) : BuiltInCommand(
-        cmdLine), aliasesMap(
-        aliasesMap) {
+AliasCommand::AliasCommand(const char* cmdLine, const char* raw_cmd_line,
+                           map<string, string>* aliasesMap) :
+        BuiltInCommand(cmdLine, raw_cmd_line),
+        aliasesMap(
+                aliasesMap) {
     
     // Check if the command contains anything after "alias"
     if (numArgs == 1) {
@@ -639,7 +649,7 @@ AliasCommand::AliasCommand(const char* cmdLine,
     //TODO: change to REGEX
     if (equalsSignPos == string::npos) {
         throw runtime_error(
-                "smash error: alias: invalid alias format");
+                "smash error: alias: invalid alias format\n");
     }
     
     // Extract the Alias Name
@@ -656,7 +666,7 @@ AliasCommand::AliasCommand(const char* cmdLine,
     if (commandDef.empty() || commandDef.front() != '\'' ||
         commandDef.back() != '\'') {
         throw runtime_error(
-                "smash error: alias: invalid alias format");
+                "smash error: alias: invalid alias format\n");
     }
     
     // Store the cleaned alias name and the command content (inside the quotes)
@@ -667,10 +677,10 @@ AliasCommand::AliasCommand(const char* cmdLine,
     // Check if the alias name itself is valid (e.g., not containing '=' or illegal characters)
     int legalNameRes = isValidAliasName(newAliasName);
     if (legalNameRes == -1) {
-        throw runtime_error("smash error: alias: invalid alias format");
+        throw runtime_error("smash error: alias: invalid alias format\n");
     } else if (legalNameRes == 0) {
         throw runtime_error("smash error: alias: " + newAliasName +
-                            " already exists or is a reserved command");
+                            " already exists or is a reserved command\n");
     }
 };
 
@@ -701,8 +711,9 @@ void AliasCommand::execute() {
 };
 
 UnAliasCommand::UnAliasCommand(const char* cmd_line,
+                               const char* raw_cmd_line,
                                map<string, string>* aliasesMap) :
-        BuiltInCommand(cmd_line), aliasesMap(aliasesMap) {
+        BuiltInCommand(cmd_line, raw_cmd_line), aliasesMap(aliasesMap) {
     
     if (numArgs == 1) {
         //empty command
@@ -718,8 +729,9 @@ UnAliasCommand::UnAliasCommand(const char* cmd_line,
     }
 }
 
-UnSetEnvCommand::UnSetEnvCommand(const char* cmdLine) :
-        BuiltInCommand(cmdLine) {
+UnSetEnvCommand::UnSetEnvCommand(const char* cmdLine,
+                                 const char* raw_cmd_line) :
+        BuiltInCommand(cmdLine, raw_cmd_line) {
     if (numArgs == 1) {
         throw std::runtime_error("smash error: unsetenv: not enough arguments");
     }
@@ -813,7 +825,9 @@ void SysInfoCommand::execute() {
     }
 }
 
-RedirectionCommand::RedirectionCommand(const char* cmdLine) : Command(cmdLine) {
+RedirectionCommand::RedirectionCommand(const char* cmdLine,
+                                       const char* raw_cmd_line) : Command(
+        cmdLine, raw_cmd_line) {
     string cmdS = string(cmdLine);
     int firstArrowIdx = cmdS.find_first_of('>');
     int lastArrowIdx = cmdS.find_last_of('>');
@@ -893,7 +907,9 @@ void RedirectionCommand::execute() {
     }
 }
 
-PipeCommand::PipeCommand(const char* cmdLine) : Command(cmdLine) {
+PipeCommand::PipeCommand(const char* cmdLine,
+                         const char* raw_cmd_line) : Command(cmdLine,
+                                                             raw_cmd_line) {
     std::string line_str(cmdLine);
     
     // Find the position of the first pipe character
@@ -1037,23 +1053,34 @@ DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
     
 }
 
-#include <sys/stat.h> // for stat() and struct stat
+#include <dirent.h>     /* Defines DT_* constants */
+#include <fcntl.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+
+struct linux_dirent {
+    unsigned long d_ino;
+    unsigned long d_off;
+    unsigned short d_reclen;
+    char d_name[];
+};
 
 int getKBDiskUsage(const std::string& path) {
     struct stat st;
     
-    // CHANGE: Use lstat instead of stat
+    // Check file stats using lstat
     if (lstat(path.c_str(), &st) == -1) {
-        std::cerr << "smash error: stat failed for " << path << std::endl;
         return 0;
     }
     
+    // Calculate size of the current entry
     int total_usage_kb = (st.st_size + 1023) / 1024;
+    
+    // If it is a directory, traverse it
     if (S_ISDIR(st.st_mode)) {
-        DIR* dir = opendir(path.c_str());
-        if (!dir) {
-            // Note: failing to open a dir shouldn't necessarily return 0 size for the dir entry itself,
-            // but returning total_usage_kb is fine.
+        int fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
+        if (fd == -1) {
             return total_usage_kb;
         }
         
@@ -1062,15 +1089,43 @@ int getKBDiskUsage(const std::string& path) {
             std::string name = entry->d_name;
             if (name == "." || name == "..") {
                 continue;
+        char buf[4096];
+        int nread;
+        
+        // OUTER LOOP: Refill buffer
+        while (true) {
+            nread = syscall(SYS_getdents, fd, buf, 4096);
+            
+            if (nread == -1) {
+                // Error reading
+                break;
             }
-            std::string full_path = path + "/" + name;
-            total_usage_kb += getKBDiskUsage(full_path);
+            if (nread == 0) {
+                // End of directory
+                break;
+            }
+            
+            // INNER LOOP: Parse buffer
+            for (int bpos = 0; bpos < nread;) {
+                // Cast the current byte position to the structure
+                struct linux_dirent* d = (struct linux_dirent*) (buf + bpos);
+                
+                std::string name = d->d_name;
+                
+                // Skip "." and ".." to prevent infinite loops
+                if (name != "." && name != "..") {
+                    std::string full_path = path + "/" + name;
+                    total_usage_kb += getKBDiskUsage(full_path);
+                }
+                
+                // Jump to the next entry
+                bpos += d->d_reclen;
+            }
         }
-        closedir(dir);
+        close(fd);
     }
-    
     return total_usage_kb;
-};
+}
 
 void DiskUsageCommand::execute() {
     
