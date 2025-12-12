@@ -236,17 +236,17 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         return new ShowPidCommand(cmd_line, raw_cmd_line);
     } // done
     else if (firstWord == "jobs") {
-        return new JobsCommand(cmd_line, &jobsList);
+        return new JobsCommand(cmd_line,raw_cmd_line, &jobsList);
     } else if (firstWord == "sysinfo") {
-        return new SysInfoCommand(cmd_line);
+        return new SysInfoCommand(cmd_line, raw_cmd_line);
     }
         
         // multi-word commands
     else if (firstWord == "chprompt") {
-        return new SetPromptCommand(cmd_line);
+        return new SetPromptCommand(cmd_line, raw_cmd_line);
     } // done
     else if (firstWord == "cd") {
-        return new ChangeDirCommand(cmd_line);
+        return new ChangeDirCommand(cmd_line, raw_cmd_line);
     } // done
     
     else if (firstWord == "fg") {
@@ -346,8 +346,9 @@ void SetPromptCommand::execute() {
     smash.setPrompt(getCmdLine());
 } //done
 
-ChangeDirCommand::ChangeDirCommand(const char* cmdLine) : BuiltInCommand(
-        cmdLine) {
+ChangeDirCommand::ChangeDirCommand(const char* cmdLine,
+                                   const char* raw_cmd_line) : BuiltInCommand(
+        cmdLine, raw_cmd_line) {
     
     auto& smash = SmallShell::getInstance();
     if (numArgs > 2) {
@@ -398,7 +399,7 @@ ForegroundCommand::ForegroundCommand(const char* cmd_line,
         }
         
     } else {
-        throw runtime_error("smash error: fg: invalid arguments");
+        throw runtime_error("smash error: fg: invalid arguments\n");
     }
     
 }
@@ -470,12 +471,13 @@ void ComplexExternalCommand::execute() {
                                   (char*) getCmdLine(), nullptr};
             execv(argv[0], argv);
             perror("smash error: excecution failed");
+            _exit(1);
         } else if (pid > 0) {
             //parent
             auto& smash = SmallShell::getInstance();
-            smash.setFgPid(pid);
+            smash.setFgPid(pid, -2);
             waitpid(pid, nullptr, 0);
-            smash.setFgPid(-1);
+            smash.setFgPid(-1, -1);
         } else {
             perror("smash error: fork failed");
         }
@@ -485,11 +487,12 @@ void ComplexExternalCommand::execute() {
         if (pid == 0) {
             //child
             setpgrp();
-            char* argv[] = {(char *)"/bin/bash", (char *)"-c", const_cast<char*>(getCmdLine()),
+            char* argv[] = {(char*) "/bin/bash", (char*) "-c",
+                            const_cast<char*>(getCmdLine()),
                             nullptr};
             execv(argv[0], argv);
             perror("smash error: excecution failed");
-            return;
+            _exit(1);
         } else if (pid > 0) {
             //parent
             // waitpid(pid, nullptr, 0);
@@ -505,8 +508,6 @@ void ComplexExternalCommand::execute() {
 }
 
 void SimpleExternalCommand::execute() {
-//    std::cout << "Executing SimpleExternalCommand: " << getCmdLine()
-//              << std::endl;
     if (args[0] == nullptr) {
         // Nothing to execute
         return;
@@ -526,9 +527,9 @@ void SimpleExternalCommand::execute() {
         } else if (pid > 0) {
             //parent
             auto& smash = SmallShell::getInstance();
-            smash.setFgPid(pid);
+            smash.setFgPid(pid, -2);
             waitpid(pid, nullptr, 0);
-            smash.setFgPid(-1);
+            smash.setFgPid(-1, -1);
         } else {
             perror("smash error: fork failed");
         }
@@ -742,7 +743,7 @@ void UnSetEnvCommand::execute() {
         string varName = string(args[j]);
         if (!checkVarExistsInProc(varName)) {
             throw std::runtime_error("smash error: unsetenv: " + varName
-                                     + " does not exist");
+                                     + " does not exist\n");
         }
         removeFromEnviron(varName);
     }
@@ -767,7 +768,7 @@ bool UnSetEnvCommand::checkVarExistsInProc(const std::string& targetVar) {
 }
 
 void UnSetEnvCommand::removeFromEnviron(const std::string& targetVar) {
-    extern char **environ;
+    extern char** environ;
     size_t len = (targetVar).length();
     
     // straight out of man 7 - https://man7.org/tlpi/code/online/dist/proc/setenv.c.html
@@ -1037,7 +1038,9 @@ void PipeCommand::execute() {
     }
 }
 
-DiskUsageCommand::DiskUsageCommand(const char* cmdLine) : Command(cmdLine) {
+DiskUsageCommand::DiskUsageCommand(const char* cmdLine,
+                                   const char* raw_cmd_line) : Command(cmdLine,
+                                                                       raw_cmd_line) {
     if (numArgs == 1) {
         if (getcwd(this->path, PATH_MAX) == nullptr) {
             perror(
