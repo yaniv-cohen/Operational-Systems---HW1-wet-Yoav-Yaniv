@@ -244,7 +244,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     } else if (firstWord == "du") {
         return new DiskUsageCommand(cmd_line);
     } else if (firstWord == "whoami") {
-        return new WhoAmICommand(cmd_line);
+        return new WhoAmICommand(nullptr, cmd_line);
     }
         // not built in command
         // not special command
@@ -1084,16 +1084,9 @@ void DiskUsageCommand::execute() {
     std::cout << "Total disk usage: " << total_kb << " KB" << std::endl;
 }
 
-#include <sys/types.h>
-#include <pwd.h>
-
-WhoAmICommand::WhoAmICommand(const char* cmdLine) : Command(cmdLine) {
-// 1. Get the real user ID and group ID
-    userId = geteuid();
-    groupId = getegid();
-}
-
 void WhoAmICommand::execute() {
+    // 1. Get the real user ID and group ID
+    uid_t userId = geteuid();
     //read entirety of passwd into filecontent
     int fd = open("/etc/passwd", O_RDONLY);
     if(fd == -1){
@@ -1108,7 +1101,7 @@ void WhoAmICommand::execute() {
     }
     close(fd);
 
-    //read lines from fileContent: each line = entry
+    //read lines from fileContent: each line = entry.
     //entry format: name:password:UID:GID:gecos:directory:shell
     stringstream lineStream(fileContent);
     string line;
@@ -1116,21 +1109,22 @@ void WhoAmICommand::execute() {
         stringstream fieldStream(line);
         vector<string> fields;
         string field;
-        while(getline(fieldStream, field, ':')){
+        while(getline(fieldStream, field, ':')) {
             fields.push_back(field);
         }
-        try{
-
+        if(fields.size() >= 6){
+            try{
+                int currentId = stoi(fields[2]);
+                if(currentId == userId){
+                    printf("%s\n%s\n%s\n%s\n", fields[0].c_str(),
+                           fields[2].c_str(), fields[3].c_str(),fields[5].c_str());
+                    return;
+                }
+            }
+            catch (...){
+                continue;
+            }
         }
-        if(fields.size() == 6){
-
-        }
-
-
-
     }
-
-
-    printf("%ld\n%ld\n%s %s\n", (long) userId,
-           (long) groupId, username, homeDir);
+    perror("smash error: user not found");
 }

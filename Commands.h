@@ -121,10 +121,9 @@ public:
 };
 
 class WhoAmICommand : public Command {
-    uid_t userId;
-    gid_t groupId;
+
 public:
-    WhoAmICommand(const char* cmd_line);
+    WhoAmICommand(const char *cmdLine) : Command(cmdLine){};
     
     virtual ~WhoAmICommand() {
     };
