@@ -233,9 +233,13 @@ public:
     
     void removeFinishedJobs();
     
-    JobsList::JobEntry* getJobById(int jobId) {
-        return &jobs.at(jobId);
-    };
+    JobEntry* getJobById(int jobId) {
+        auto it = jobs.find(jobId);
+        if (it == jobs.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
     
     JobsList::JobEntry* getLastJob() {
         return &prev(jobs.end())->second;
@@ -243,7 +247,6 @@ public:
 }; //done
 
 class JobsCommand : public BuiltInCommand {
-    // TODO: Add your data members
     JobsList* jobsList;
 
 public:
@@ -258,7 +261,6 @@ public:
 }; // done
 
 class KillCommand : public BuiltInCommand {
-    // TODO: Add your data members
     int targetJobId;
     int signalNumber;
     JobsList* jobsList;
@@ -296,7 +298,6 @@ public:
 };
 
 class ForegroundCommand : public BuiltInCommand {
-    // TODO: Add your data members
     int targetJobId;
     JobsList* jobsList;
 
@@ -376,7 +377,6 @@ public:
 
 class SmallShell {
 private:
-    // TODO: Add your data members
     string previousUsedPath = "\n";
     string prompt = "smash";
     JobsList jobsList;

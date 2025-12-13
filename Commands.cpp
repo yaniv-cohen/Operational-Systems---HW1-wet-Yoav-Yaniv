@@ -154,8 +154,6 @@ bool isPipeCommand(const string& cmd_line) {
     return false; // No active pipe found
 }
 
-// TODO: Add your implementation for classes in Commands.h
-
 SmallShell::SmallShell() = default;
 
 SmallShell::~SmallShell() = default;
@@ -184,7 +182,6 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     // 4. Check for Alias Substitution
     // Note: The 'aliases' map is assumed to be a member of SmallShell.
     auto alias_it = aliases.find(firstWord);
-    //TODO: handle hi&
     if (alias_it != aliases.end()) {
         // Alias found!
         string alias_value = alias_it->second; // e.g., "ls -l"
@@ -252,8 +249,7 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
         return new JobsCommand(cmd_line, raw_cmd_line, &jobsList);
     } else if (firstWord == "sysinfo") {
         return new SysInfoCommand(cmd_line, raw_cmd_line);
-    }
-    else if (firstWord == "usbinfo") {
+    } else if (firstWord == "usbinfo") {
         return new USBInfoCommand(cmd_line, raw_cmd_line);
     }
         
@@ -325,7 +321,6 @@ void GetCurrDirCommand::execute() {
 }
 
 void SmallShell::executeCommand(const char* cmd_line) {
-    // TODO: Add your implementation here
     Command* cmd = CreateCommand(cmd_line);
     cmd->execute();
     
@@ -410,6 +405,9 @@ ForegroundCommand::ForegroundCommand(const char* cmd_line,
         try {
             // Safety check for integer conversion
             targetJobId = std::stoi(args[1]);
+            if(targetJobId<= 0 ){
+                throw runtime_error("smash error: fg: invalid arguments\n");
+            }
         } catch (const std::exception& e) {
             throw runtime_error("smash error: fg: invalid arguments\n");
         }
@@ -635,6 +633,9 @@ KillCommand::KillCommand(const char* cmdLine, const char* raw_cmd_line,
     try {
         // Convert the job ID argument to an integer
         targetJobId = std::stoi(args[2]);
+        if(targetJobId <= 0){
+            throw std::runtime_error("smash error: kill: invalid arguments\n");
+        }
     } catch (const std::exception& e) {
         throw std::runtime_error("smash error: kill: invalid arguments\n");
     }
@@ -663,7 +664,6 @@ AliasCommand::AliasCommand(const char* cmdLine, const char* raw_cmd_line,
     // Find the first occurrence of '=' in the rest of the string
     size_t equalsSignPos = cmd.find_first_of('=');
     
-    //TODO: change to REGEX
     if (equalsSignPos == string::npos) {
         throw runtime_error(
                 "smash error: alias: invalid alias format\n");
@@ -741,7 +741,8 @@ UnAliasCommand::UnAliasCommand(const char* cmd_line,
         
         if (aliasesMap->erase(args[i]) == 0) {
             throw std::runtime_error("smash error: unalias: " +
-                                     string(args[i]) + " alias does not exist\n");
+                                     string(args[i]) +
+                                     " alias does not exist\n");
         }
     }
 }
@@ -750,7 +751,8 @@ UnSetEnvCommand::UnSetEnvCommand(const char* cmdLine,
                                  const char* raw_cmd_line) :
         BuiltInCommand(cmdLine, raw_cmd_line) {
     if (numArgs == 1) {
-        throw std::runtime_error("smash error: unsetenv: not enough arguments\n");
+        throw std::runtime_error(
+                "smash error: unsetenv: not enough arguments\n");
     }
 }
 
@@ -860,6 +862,26 @@ RedirectionCommand::RedirectionCommand(const char* cmdLine,
     outerFile = _trim(cmdS.substr(lastArrowIdx + 1));
 }
 
+class SafeRedirectCommandExecute {
+    int original_fd;
+    int target_fd;
+public:
+    SafeRedirectCommandExecute(int target_fd) : target_fd(target_fd) {
+        original_fd = dup(STDOUT_FILENO);
+        if (dup2(target_fd, STDOUT_FILENO) == -1) {
+            perror("smash error: dup2 failed");
+        }
+    }
+    
+    ~SafeRedirectCommandExecute() {
+        if (dup2(original_fd, STDOUT_FILENO) == -1) {
+            perror("smash error: dup2 restore failed");
+        }
+        close(original_fd);
+        close(target_fd);
+    }
+};
+
 void RedirectionCommand::execute() {
     int flags = O_WRONLY | O_CREAT;
     if (isAppend) {
@@ -892,8 +914,16 @@ void RedirectionCommand::execute() {
     
     close(fd);
     
-    SmallShell::getInstance().executeCommand(innerCommand.c_str());
-    
+    try {
+        SmallShell::getInstance().executeCommand(innerCommand.c_str());
+        
+    } catch (const std::exception& e) {
+        // Restore the original stdout (terminal)
+        if (dup2(original_stdout, 1) == -1) {
+            perror("smash error: dup2 restoring stdout failed");
+        }
+        cerr << e.what();
+    }
     // Restore the original stdout (terminal)
     if (dup2(original_stdout, 1) == -1) {
         perror("smash error: dup2 restoring stdout failed");
@@ -942,7 +972,7 @@ void PipeCommand::execute() {
     }
     
     pid_t pid1 = fork(); // Fork Command 1 (Writer)
-   
+    
     if (pid1 == 0) {
         // --- CHILD 1 (Writer: command1) ---
         close(pfd[0]); // Close read end
@@ -953,7 +983,7 @@ void PipeCommand::execute() {
             perror("smash error: dup2 failed");
             _exit(1);
         }
-        close(pfd[1]); // Close write end //MAYBE WRONG
+        close(pfd[1]); // Close write end
         
         Command* cmd = SmallShell::getInstance()
                 .CreateCommand(command1Line.c_str());
@@ -1173,18 +1203,18 @@ void WhoAmICommand::execute() {
 
 void USBInfoCommand::execute() {
     int fdDir = open("/sys/bus/usb/devices", O_RDONLY | O_DIRECTORY);
-    if(fdDir == -1){
+    if (fdDir == -1) {
         perror("smash error: open failed");
         return;
     }
-
+    
     char buf[4096];
     int nread;
     bool found = false;
     // OUTER LOOP: Refill buffer
     while (true) {
         nread = syscall(SYS_getdents, fdDir, buf, 4096);
-
+        
         if (nread == -1) {
             // Error reading
             perror("smash error: getdents failed");
@@ -1194,27 +1224,30 @@ void USBInfoCommand::execute() {
             // End of directory
             break;
         }
-
+        
         // INNER LOOP: Parse buffer
         for (int bpos = 0; bpos < nread;) {
-
+            
             // Cast the current byte position to the structure
             struct linux_dirent* d = (struct linux_dirent*) (buf + bpos);
             std::string name = d->d_name;
-
+            
             // Skip "." and ".." to prevent infinite loops
             if (name != "." && name != "..") {
                 std::string fullPath = "/sys/bus/usb/devices/" + name + "/";
                 string vendor = _trim(_readFile(fullPath + "idVendor"));
-                if(!vendor.empty()){
+                if (!vendor.empty()) {
                     string product = _trim(_readFile(fullPath + "idProduct"));
                     string productName = _trim(_readFile(fullPath + "product"));
-                    string manufacturer = _trim(_readFile(fullPath + "manufacturer"));
+                    string manufacturer = _trim(
+                            _readFile(fullPath + "manufacturer"));
                     string devNum = _trim(_readFile(fullPath + "devnum"));
                     string power = _trim(_readFile(fullPath + "bMaxPower"));
-                    if(stoi(devNum) != 1){
-                        printf("Device %s: ID %s:%s %s %s MaxPower: %s\n", devNum.c_str(), vendor.c_str(),
-                               product.c_str(), manufacturer.c_str(), productName.c_str(), power.c_str());
+                    if (stoi(devNum) != 1) {
+                        printf("Device %s: ID %s:%s %s %s MaxPower: %s\n",
+                               devNum.c_str(), vendor.c_str(),
+                               product.c_str(), manufacturer.c_str(),
+                               productName.c_str(), power.c_str());
                         found = true;
                     }
                 }
@@ -1224,8 +1257,8 @@ void USBInfoCommand::execute() {
         }
     }
     close(fdDir);
-
-    if(!found){
+    
+    if (!found) {
         throw runtime_error("smash error: usbinfo: no USB devices found\n");
     }
 }

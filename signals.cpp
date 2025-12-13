@@ -6,7 +6,6 @@
 using namespace std;
 
 void ctrlCHandler(int sig_num) {
-    // TODO: Add your implementation
     auto& smash = SmallShell::getInstance();
     pid_t targetPid = smash.getFgPid();
     cout << "smash: got ctrl-C" << endl;
