@@ -1212,10 +1212,11 @@ void USBInfoCommand::execute() {
                     string manufacturer = _trim(_readFile(fullPath + "manufacturer"));
                     string devNum = _trim(_readFile(fullPath + "devnum"));
                     string power = _trim(_readFile(fullPath + "bMaxPower"));
-
-                    printf("Device %s: ID %s:%s %s %s MaxPower: %s\n", devNum.c_str(), vendor.c_str(),
-                           product.c_str(), manufacturer.c_str(), productName.c_str(), power.c_str());
-                    found = true;
+                    if(stoi(devNum) != 1){
+                        printf("Device %s: ID %s:%s %s %s MaxPower: %s\n", devNum.c_str(), vendor.c_str(),
+                               product.c_str(), manufacturer.c_str(), productName.c_str(), power.c_str());
+                        found = true;
+                    }
                 }
             }
             // Jump to the next entry
