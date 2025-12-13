@@ -91,8 +91,7 @@ public:
     explicit RedirectionCommand(const char* cmdLine,
                                 const char* raw_cmd_line);
     
-    virtual ~RedirectionCommand() {
-    }
+    virtual ~RedirectionCommand() = default;
     
     void execute() override;
     
@@ -121,8 +120,7 @@ class DiskUsageCommand : public Command {
 public:
     DiskUsageCommand(const char* cmd_line, const char* raw_cmd_line);
     
-    virtual ~DiskUsageCommand() {
-    }
+    virtual ~DiskUsageCommand() = default;
     
     void execute() override;
 };
@@ -132,25 +130,21 @@ class WhoAmICommand : public Command {
 public:
     WhoAmICommand(const char* cmdLine, const char* raw_cmd_line) : Command(cmdLine, raw_cmd_line) {};
     
-    virtual ~WhoAmICommand() {
-    };
+    virtual ~WhoAmICommand() = default;
     
     void execute() override;
 };
 
-//
-// class USBInfoCommand : public Command
-//{
-//    // TODO: Add your data members **BONUS: 10 Points**
-// public:
-//    USBInfoCommand(const char *cmd_line);
-//
-//    virtual ~USBInfoCommand()
-//    {
-//    }
-//
-//    void execute() override;
-//};
+ class USBInfoCommand : public Command
+{
+    // TODO: Add your data members **BONUS: 10 Points**
+ public:
+    USBInfoCommand(const char* cmdLine,const char* raw_cmd_line) : Command(cmdLine, raw_cmd_line){};
+
+    virtual ~USBInfoCommand() = default;
+
+    void execute() override;
+};
 
 
 class ChangeDirCommand : public BuiltInCommand {

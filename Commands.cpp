@@ -59,14 +59,6 @@ bool SmallShell::isBuiltinCommand(const std::string& s) {
     return false;
 }
 
-void printAllArgs(char** args) {
-    int i = 0;
-    while (args[i] != nullptr) {
-        std::cout << "arg " << i << ": " << args[i] << std::endl;
-        i++;
-    }
-}
-
 string _ltrim(const std::string& s) {
     size_t start = s.find_first_not_of(WHITESPACE);
     return (start == std::string::npos) ? "" : s.substr(start);
@@ -261,6 +253,9 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     } else if (firstWord == "sysinfo") {
         return new SysInfoCommand(cmd_line, raw_cmd_line);
     }
+    else if (firstWord == "usbinfo") {
+        return new USBInfoCommand(cmd_line, raw_cmd_line);
+    }
         
         // multi-word commands
     else if (firstWord == "chprompt") {
@@ -292,8 +287,8 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     
     else {
 //        std::cout << "not matched any built in command\n" << std::endl;
-        if (string(cmd_line).find("*") == string::npos &&
-            string(cmd_line).find("?") == string::npos) {
+        if (string(cmd_line).find('*') == string::npos &&
+            string(cmd_line).find('?') == string::npos) {
             
             return new SimpleExternalCommand(cmd_line, raw_cmd_line,
                                              isBackground);
@@ -311,7 +306,7 @@ Command::Command(const char* cmd_line, const char* raw_cmd_line) {
     strcpy(this->raw_cmd_line, raw_cmd_line);
     memset(args, 0, sizeof(args));
     numArgs = _parseCommandLine(cmd_line, args);
-};
+}
 
 Command::~Command() {
     for (int i = 0; i < COMMAND_MAX_ARGS + 1; i++) {
@@ -591,7 +586,7 @@ void JobsList::removeFinishedJobs() {
             ++it;
         }
     }
-};
+}
 
 void JobsList::addJob(Command* cmd, int pid) {
     // calculate the new Job ID
@@ -704,7 +699,7 @@ AliasCommand::AliasCommand(const char* cmdLine, const char* raw_cmd_line,
         throw runtime_error("smash error: alias: " + newAliasName +
                             " already exists or is a reserved command\n");
     }
-};
+}
 
 int AliasCommand::isValidAliasName(std::string& s) {
     for (char c: s) {
@@ -720,7 +715,7 @@ int AliasCommand::isValidAliasName(std::string& s) {
         return 0;
     }
     return 1;
-};
+}
 
 void AliasCommand::execute() {
     if (emptyAlias) {
@@ -730,7 +725,7 @@ void AliasCommand::execute() {
         return;
     }
     aliasesMap->insert(pair<string, string>(newAliasName, newAliasCommand));
-};
+}
 
 UnAliasCommand::UnAliasCommand(const char* cmd_line,
                                const char* raw_cmd_line,
@@ -805,7 +800,7 @@ void UnSetEnvCommand::removeFromEnviron(const std::string& targetVar) {
             ep++;
         }
     }
-};
+}
 
 void SysInfoCommand::execute() {
     string type = _trim(_readFile("/proc/sys/kernel/ostype"));
@@ -937,7 +932,7 @@ PipeCommand::PipeCommand(const char* cmdLine,
     this->command2Line = line_str.substr(splitPos);
     this->command2Line = _trim(this->command2Line);
 //    cout << " into " << command2Line << endl;
-};
+}
 
 void PipeCommand::execute() {
     int pfd[2];
@@ -1085,6 +1080,7 @@ int getKBDiskUsage(const std::string& path) {
     if (S_ISDIR(st.st_mode)) {
         int fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
         if (fd == -1) {
+            perror("smash error: open failed");
             return total_usage_kb;
         }
         
@@ -1097,6 +1093,7 @@ int getKBDiskUsage(const std::string& path) {
             
             if (nread == -1) {
                 // Error reading
+                perror("smash error: getdents failed");
                 break;
             }
             if (nread == 0) {
@@ -1172,4 +1169,62 @@ void WhoAmICommand::execute() {
         }
     }
     perror("smash error: user not found");
+}
+
+void USBInfoCommand::execute() {
+    int fdDir = open("/sys/bus/usb/devices", O_RDONLY | O_DIRECTORY);
+    if(fdDir == -1){
+        perror("smash error: open failed");
+        return;
+    }
+
+    char buf[4096];
+    int nread;
+    bool found = false;
+    // OUTER LOOP: Refill buffer
+    while (true) {
+        nread = syscall(SYS_getdents, fdDir, buf, 4096);
+
+        if (nread == -1) {
+            // Error reading
+            perror("smash error: getdents failed");
+            break;
+        }
+        if (nread == 0) {
+            // End of directory
+            break;
+        }
+
+        // INNER LOOP: Parse buffer
+        for (int bpos = 0; bpos < nread;) {
+
+            // Cast the current byte position to the structure
+            struct linux_dirent* d = (struct linux_dirent*) (buf + bpos);
+            std::string name = d->d_name;
+
+            // Skip "." and ".." to prevent infinite loops
+            if (name != "." && name != "..") {
+                std::string fullPath = "/sys/bus/usb/devices/" + name + "/";
+                string vendor = _trim(_readFile(fullPath + "idVendor"));
+                if(!vendor.empty()){
+                    string product = _trim(_readFile(fullPath + "idProduct"));
+                    string productName = _trim(_readFile(fullPath + "product"));
+                    string manufacturer = _trim(_readFile(fullPath + "manufacturer"));
+                    string devNum = _trim(_readFile(fullPath + "devnum"));
+                    string power = _trim(_readFile(fullPath + "bMaxPower"));
+
+                    printf("Device %s: ID %s:%s %s %s MaxPower: %s\n", devNum.c_str(), vendor.c_str(),
+                           product.c_str(), manufacturer.c_str(), productName.c_str(), power.c_str());
+                    found = true;
+                }
+            }
+            // Jump to the next entry
+            bpos += d->d_reclen;
+        }
+    }
+    close(fdDir);
+
+    if(!found){
+        throw runtime_error("smash error: usbinfo: no USB devices found\n");
+    }
 }
