@@ -6,7 +6,6 @@
 #include <vector>
 #include <sstream>
 #include <sys/wait.h>
-#include <sys/utsname.h>
 #include <sys/sysinfo.h>
 #include <limits.h>
 #include <iomanip>
@@ -15,6 +14,10 @@
 #include <signal.h>
 #include <utility>
 #include <fstream>
+#include <fcntl.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
 
 using namespace std;
 
@@ -1051,12 +1054,7 @@ DiskUsageCommand::DiskUsageCommand(const char* cmdLine,
     
 }
 
-#include <dirent.h>     /* Defines DT_* constants */
-#include <fcntl.h>
-#include <stdio.h>
-#include <sys/stat.h>
-#include <sys/syscall.h>
-
+//copied from man-page (dirent.h)
 struct linux_dirent {
     unsigned long d_ino;
     unsigned long d_off;
