@@ -408,7 +408,7 @@ ForegroundCommand::ForegroundCommand(const char* cmd_line,
         try {
             // Safety check for integer conversion
             targetJobId = std::stoi(args[1]);
-            if(targetJobId<= 0 ){
+            if (targetJobId <= 0) {
                 throw runtime_error("smash error: fg: invalid arguments\n");
             }
         } catch (const std::exception& e) {
@@ -625,7 +625,6 @@ KillCommand::KillCommand(const char* cmdLine, const char* raw_cmd_line,
     string signal_str = string(args[1]).substr(1);
     
     try {
-        // Convert the extracted string to an integer
         signalNumber = std::stoi(signal_str);
     } catch (const std::exception& e) {
         // Handle non-integer signal argument
@@ -636,7 +635,7 @@ KillCommand::KillCommand(const char* cmdLine, const char* raw_cmd_line,
     try {
         // Convert the job ID argument to an integer
         targetJobId = std::stoi(args[2]);
-        if(targetJobId <= 0){
+        if (targetJobId <= 0) {
             throw std::runtime_error("smash error: kill: invalid arguments\n");
         }
     } catch (const std::exception& e) {

@@ -271,9 +271,9 @@ public:
     };
     
     void execute() override {
-        // 1. Find and validate the job
+        // Find and validate the job
         JobsList::JobEntry* targetJob = jobsList
-                ->getJobById(targetJobId); // You'll need this method
+                ->getJobById(targetJobId);
         
         if (targetJob == nullptr) {
             // This check must happen AFTER successful parsing
@@ -284,16 +284,14 @@ public:
         
         pid_t pid = targetJob->pid;
         
-        // 2. Send the signal
+        cout << "signal number " << signalNumber << " was sent to pid " << pid
+             << endl;
+        // Send the signal
         if (kill(pid, signalNumber) == -1) {
             // Check for kill failure (e.g., permission denied)
             perror("smash error: kill failed");
             return;
         }
-        
-        // 3. Output confirmation
-        cout << "signal number " << signalNumber << " was sent to pid " << pid
-             << endl;
     };
 };
 
