@@ -383,11 +383,13 @@ ChangeDirCommand::ChangeDirCommand(const char* cmdLine,
 void ChangeDirCommand::execute() {
     char p[PATH_MAX];
     getcwd(p, PATH_MAX);
+    
     if (chdir(newTargetPath.c_str()) != 0) {
         perror("smash error: chdir failed");
+    } else {
+        auto& smash = SmallShell::getInstance();
+        smash.setPreviousUsedPathChar(p);
     }
-    auto& smash = SmallShell::getInstance();
-    smash.setPreviousUsedPathChar(p);
 }
 
 ForegroundCommand::ForegroundCommand(const char* cmd_line,
