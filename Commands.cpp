@@ -516,7 +516,6 @@ void ComplexExternalCommand::execute() {
 //            std::cout << "not waiting" << std::endl;
             SmallShell::getInstance().getJobsList().addJob(this, pid);
 //            std::cout << "added to joblist" << std::endl;
-            SmallShell::getInstance().getJobsList().printJobsList();
             return;
         } else {
             perror("smash error: fork failed");
@@ -616,8 +615,7 @@ KillCommand::KillCommand(const char* cmdLine, const char* raw_cmd_line,
     targetJobId = -1;
     signalNumber = -1;
     
-    // Signal Number Parsing
-    if (stoi(args[1]) >= 0 || args[1][0] != '-') {
+    if (args[1][0] != '-' || stoi(args[1]) >= 0) {
         throw runtime_error("smash error: kill: invalid arguments\n");
     }
     
@@ -628,7 +626,8 @@ KillCommand::KillCommand(const char* cmdLine, const char* raw_cmd_line,
         signalNumber = std::stoi(signal_str);
     } catch (const std::exception& e) {
         // Handle non-integer signal argument
-        perror("smash error: kill: invalid signal number");
+        perror("smash error: kill: invalid arguments");
+//        perror("smash error: kill: invalid signal number");
     }
     
     // Job ID Parsing
@@ -1101,7 +1100,7 @@ int getKBDiskUsage(const std::string& path) {
     
     // Calculate size of the current entry
 //    int total_usage_kb = (st.st_size + 1023) / 1024;
-    int total_usage_kb = st.st_blocks / 2;
+    int total_usage_kb = (st.st_blocks + 1) / 2;
     
     // If it is a directory, traverse it
     if (S_ISDIR(st.st_mode)) {
@@ -1205,34 +1204,33 @@ void USBInfoCommand::execute() {
         return;
     }
     
+    // Map automatically sorts devices by ID (key)
+    map<int, string> outputs;
+    
     char buf[4096];
     int nread;
     bool found = false;
-    // OUTER LOOP: Refill buffer
+    
     while (true) {
         nread = syscall(SYS_getdents, fdDir, buf, 4096);
         
         if (nread == -1) {
-            // Error reading
             perror("smash error: getdents failed");
             break;
         }
         if (nread == 0) {
-            // End of directory
             break;
         }
         
-        // INNER LOOP: Parse buffer
         for (int bpos = 0; bpos < nread;) {
-            
-            // Cast the current byte position to the structure
             struct linux_dirent* d = (struct linux_dirent*) (buf + bpos);
-            std::string name = d->d_name;
+            string name = d->d_name;
             
-            // Skip "." and ".." to prevent infinite loops
             if (name != "." && name != "..") {
-                std::string fullPath = "/sys/bus/usb/devices/" + name + "/";
+                string fullPath = "/sys/bus/usb/devices/" + name + "/";
                 string vendor = _trim(_readFile(fullPath + "idVendor"));
+                
+                // Only process entries that have a Vendor ID (filters out interfaces like 1-1:1.0)
                 if (!vendor.empty()) {
                     string product = _trim(_readFile(fullPath + "idProduct"));
                     string productName = _trim(_readFile(fullPath + "product"));
@@ -1240,22 +1238,39 @@ void USBInfoCommand::execute() {
                             _readFile(fullPath + "manufacturer"));
                     string devNum = _trim(_readFile(fullPath + "devnum"));
                     string power = _trim(_readFile(fullPath + "bMaxPower"));
-                    if (stoi(devNum) != 1) {
-                        printf("Device %s: ID %s:%s %s %s MaxPower: %s\n",
-                               devNum.c_str(), vendor.c_str(),
-                               product.c_str(), manufacturer.c_str(),
-                               productName.c_str(), power.c_str());
-                        found = true;
+                    
+                    if (productName.empty()) productName = "N/A";
+                    if (manufacturer.empty()) manufacturer = "N/A";
+                    
+                    try {
+                        int idx = stoi(devNum);
+                        if (idx != 1) {
+                            stringstream ss;
+                            ss << "Device " << devNum << ": "
+                               << "ID " << vendor << ":" << product << " "
+                               << manufacturer << " "
+                               << productName << " "
+                               << "MaxPower: " << power << endl;
+                            
+                            outputs[idx] = ss.str();
+                            found = true; // Mark found ONLY if we successfully added it
+                        }
+                    } catch (...) {
+                        // Ignore parsing errors for specific devices
                     }
                 }
             }
-            // Jump to the next entry
             bpos += d->d_reclen;
         }
     }
+    
     close(fdDir);
     
     if (!found) {
-        throw runtime_error("smash error: usbinfo: no USB devices found\n");
+        throw runtime_error("smash error: usbinfo: no USB devices found");
+    }
+    
+    for (auto& out: outputs) {
+        cout << out.second;
     }
 }
