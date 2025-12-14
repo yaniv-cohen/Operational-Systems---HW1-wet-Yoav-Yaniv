@@ -157,6 +157,28 @@ bool isPipeCommand(const string& cmd_line) {
     return false; // No active pipe found
 }
 
+bool isRedirectionCommand(const string& cmd_line) {
+    bool inSingleQuote = false;
+    bool inDoubleQuote = false;
+    
+    for (unsigned int i = 0; i < cmd_line.length(); i++) {
+        char c = cmd_line[i];
+        
+        // Toggle quote state
+        if (c == '\'' && !inDoubleQuote) {
+            inSingleQuote = !inSingleQuote;
+        } else if (c == '\"' && !inSingleQuote) {
+            inDoubleQuote = !inDoubleQuote;
+        }
+        
+        // Check for redirection ONLY if not inside quotes
+        if (c == '>' && !inSingleQuote && !inDoubleQuote) {
+            return true; // Found a real redirection!
+        }
+    }
+    return false; // No active redirection found
+}
+
 SmallShell::SmallShell() = default;
 
 SmallShell::~SmallShell() = default;
