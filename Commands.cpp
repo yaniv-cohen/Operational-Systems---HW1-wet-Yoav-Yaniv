@@ -224,16 +224,10 @@ Command* SmallShell::CreateCommand(const char* cmd_line_raw) {
     if (isPipeCommand(cmd_line)) {
         return new PipeCommand(cmd_line, raw_cmd_line);
     }
-
-// Find the position of the redirection character
-    size_t redirect_pos = string(cmd_line).find_first_of('>');
-    // Check the position directly against std::string::npos
-    if (redirect_pos != std::string::npos) {
+    //handle ">"
+    if (isRedirectionCommand(cmd_line)
+            ) {
         // Redirection character was found!
-        
-        // Optional: Add logic here to ensure it's not inside quotes if required by spec.
-        
-        // For now, assume a found '>' means redirection must be handled
         return new RedirectionCommand(cmd_line, raw_cmd_line);
     }
 
@@ -850,40 +844,47 @@ void SysInfoCommand::execute() {
 RedirectionCommand::RedirectionCommand(const char* cmdLine,
                                        const char* raw_cmd_line) : Command(
         cmdLine, raw_cmd_line) {
+    
+    isAppend = false;
+    
     string cmdS = string(cmdLine);
-    int firstArrowIdx = cmdS.find_first_of('>');
-    int lastArrowIdx = cmdS.find_last_of('>');
-    if (firstArrowIdx == lastArrowIdx) {
-        isAppend = false;
-    } else if (firstArrowIdx + 1 == lastArrowIdx) {
-        isAppend = true;
+    bool inSingleQuote = false;
+    bool inDoubleQuote = false;
+    int splitIdx = -1;
+    
+    // Scan for redirection symbols IGNORING content in quotes
+    for (int i = 0; i < int(cmdS.length()); i++) {
+        if (cmdS[i] == '\'' && !inDoubleQuote) {
+            inSingleQuote = !inSingleQuote;
+        } else if (cmdS[i] == '\"' && !inSingleQuote) {
+            inDoubleQuote = !inDoubleQuote;
+        }
+        
+        if (!inSingleQuote && !inDoubleQuote) {
+            if (cmdS[i] == '>') {
+                splitIdx = i;
+                // Check for append (>>)
+                if (i + 1 < int(cmdS.length()) && cmdS[i+1] == '>') {
+                    isAppend = true;
+                }
+                break; // Found the redirection point
+            }
+        }
+    }
+    
+    if (splitIdx == -1) {
+        throw std::runtime_error("smash error: invalid arguments");
+    }
+    
+    // Split the command
+    innerCommand = _trim(cmdS.substr(0, splitIdx));
+    
+    if (isAppend) {
+        outerFile = _trim(cmdS.substr(splitIdx + 2)); // Skip ">>"
     } else {
-        throw std::runtime_error("smash error: invalid arguments\n");
+        outerFile = _trim(cmdS.substr(splitIdx + 1)); // Skip ">"
     }
-    
-    innerCommand = cmdS.substr(0, firstArrowIdx);
-    outerFile = _trim(cmdS.substr(lastArrowIdx + 1));
 }
-
-class SafeRedirectCommandExecute {
-    int original_fd;
-    int target_fd;
-public:
-    SafeRedirectCommandExecute(int target_fd) : target_fd(target_fd) {
-        original_fd = dup(STDOUT_FILENO);
-        if (dup2(target_fd, STDOUT_FILENO) == -1) {
-            perror("smash error: dup2 failed");
-        }
-    }
-    
-    ~SafeRedirectCommandExecute() {
-        if (dup2(original_fd, STDOUT_FILENO) == -1) {
-            perror("smash error: dup2 restore failed");
-        }
-        close(original_fd);
-        close(target_fd);
-    }
-};
 
 void RedirectionCommand::execute() {
     int flags = O_WRONLY | O_CREAT;
@@ -939,32 +940,48 @@ void RedirectionCommand::execute() {
 PipeCommand::PipeCommand(const char* cmdLine,
                          const char* raw_cmd_line) : Command(cmdLine,
                                                              raw_cmd_line) {
-    std::string line_str(cmdLine);
+    string line_str(cmdLine);
+    bool inSingleQuote = false;
+    bool inDoubleQuote = false;
+    int splitIdx = -1;
+    bool is_stderr = false;
     
-    // Find the position of the first pipe character
-    size_t firstPipePos = line_str.find('|');
-    // Determine the pipe type: '|&' or '|'
-    bool is_stderr_pipe = false; // Default to false
-    if (firstPipePos != std::string::npos &&
-        firstPipePos + 1 < line_str.length() &&
-        line_str[firstPipePos + 1] == '&') {
+    // Scan for Pipe symbol IGNORING content in quotes
+    for (int i = 0; i < int(line_str.length()); i++) {
+        if (line_str[i] == '\'' && !inDoubleQuote) {
+            inSingleQuote = !inSingleQuote;
+        } else if (line_str[i] == '\"' && !inSingleQuote) {
+            inDoubleQuote = !inDoubleQuote;
+        }
         
-        is_stderr_pipe = true;
-        isNormalPipe = false;
-    } else {
-        is_stderr_pipe = false;
-        isNormalPipe = true;
+        if (!inSingleQuote && !inDoubleQuote) {
+            if (line_str[i] == '|') {
+                splitIdx = i;
+                // Check if it is "|&"
+                if (i + 1 < int(line_str.length()) && line_str[i+1] == '&') {
+                    is_stderr = true;
+                }
+                break; // Found the FIRST valid pipe outside quotes
+            }
+        }
     }
-    // Determine the split position (either '|' or '|&')
-    size_t splitPos = firstPipePos + (is_stderr_pipe ? 2 : 1);
     
-    this->command1Line = line_str.substr(0, firstPipePos);
-    this->command1Line = _trim(this->command1Line);
-//    cout << "c1 " << command1Line << endl;
+    if (splitIdx == -1) {
+        this->command1Line = line_str;
+        this->command2Line = "";
+        return;
+    }
     
-    this->command2Line = line_str.substr(splitPos);
-    this->command2Line = _trim(this->command2Line);
-//    cout << " into " << command2Line << endl;
+    // Split the string
+    this->command1Line = _trim(line_str.substr(0, splitIdx));
+    
+    if (is_stderr) {
+        this->isNormalPipe = false;
+        this->command2Line = _trim(line_str.substr(splitIdx + 2)); // Skip "|&"
+    } else {
+        this->isNormalPipe = true;
+        this->command2Line = _trim(line_str.substr(splitIdx + 1)); // Skip "|"
+    }
 }
 
 void PipeCommand::execute() {
